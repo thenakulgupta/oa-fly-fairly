@@ -4,3 +4,4 @@ python -m venv venv
 source venv/bin/activate
 pip3 install -r requirements.txt
 python filter_airports.py
+python enrich_countries.py
