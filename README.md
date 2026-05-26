@@ -8,3 +8,4 @@ python enrich_countries.py
 python enrich_regions.py
 python enrich_aliases.py
 python build_region_mapping.py
+python build_city_groups.py
