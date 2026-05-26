@@ -11,22 +11,24 @@ OUTPUT_PATH = ROOT_DIR / "data" / "enriched_airports.csv"
 
 def main() -> None:
     airports = pd.read_csv(AIRPORTS_PATH, dtype=str, keep_default_na=False)
-    countries = pd.read_csv(COUNTRIES_PATH, dtype=str, keep_default_na=False)
-
-    country_names = countries[["code", "name"]].rename(columns={"name": "country_name"})
-    enriched_airports = airports.merge(
-        country_names,
-        how="left",
-        left_on="iso_country",
-        right_on="code",
+    countries = pd.read_csv(
+        COUNTRIES_PATH,
+        dtype=str,
+        keep_default_na=False,
+        usecols=["code", "name"],
     )
-    enriched_airports = enriched_airports.drop(columns=["code"])
 
-    matched_count = int(enriched_airports["country_name"].fillna("").str.strip().ne("").sum())
-    unmatched_count = len(enriched_airports) - matched_count
+    # DSA optimization: create a hash map from country code to country name.
+    # Mapping is O(n + m) and uses less extra memory than a dataframe merge
+    # because we only need to add one lookup-derived column.
+    country_name_by_code = countries.drop_duplicates("code").set_index("code")["name"]
+    airports["country_name"] = airports["iso_country"].map(country_name_by_code)
+
+    matched_count = int(airports["country_name"].fillna("").str.strip().ne("").sum())
+    unmatched_count = len(airports) - matched_count
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    enriched_airports.to_csv(OUTPUT_PATH, index=False)
+    airports.to_csv(OUTPUT_PATH, index=False)
 
     print("Country enrichment complete")
     print(f"Input airports file: {AIRPORTS_PATH}")

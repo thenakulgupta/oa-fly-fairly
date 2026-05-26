@@ -7,9 +7,11 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 INPUT_PATH = ROOT_DIR / "data" / "airports.csv"
 OUTPUT_PATH = ROOT_DIR / "data" / "filtered_airports.csv"
 
+EXCLUDED_TYPES = {"closed", "heliport", "seaplane_base"}
 
-def has_valid_iata(series: pd.Series) -> pd.Series:
-    return series.fillna("").astype(str).str.strip().ne("")
+
+def has_valid_iata(iata_codes: pd.Series) -> pd.Series:
+    return iata_codes.fillna("").astype(str).str.strip().ne("")
 
 
 def main() -> None:
@@ -19,25 +21,27 @@ def main() -> None:
     airports["iata_code"] = airports["iata_code"].fillna("").astype(str).str.strip()
 
     valid_iata_mask = has_valid_iata(airports["iata_code"])
-    removed_invalid_iata_count = int(len(airports) - valid_iata_mask.sum())
-
+    removed_invalid_iata_count = int(total_airports - valid_iata_mask.sum())
     airports_with_iata = airports.loc[valid_iata_mask].copy()
 
-    removed_closed_count = int(airports_with_iata["type"].eq("closed").sum())
-    active_airports = airports_with_iata.loc[airports_with_iata["type"].ne("closed")].copy()
+    # DSA optimization: build one hash-count table for airport types in O(n)
+    # instead of scanning the dataframe once per removal rule.
+    type_counts_after_iata = airports_with_iata["type"].value_counts()
+    removed_closed_count = int(type_counts_after_iata.get("closed", 0))
+    removed_heliport_count = int(type_counts_after_iata.get("heliport", 0))
+    removed_seaplane_base_count = int(type_counts_after_iata.get("seaplane_base", 0))
 
-    removed_heliport_count = int(active_airports["type"].eq("heliport").sum())
-    non_heliport_airports = active_airports.loc[active_airports["type"].ne("heliport")].copy()
-
-    removed_seaplane_base_count = int(non_heliport_airports["type"].eq("seaplane_base").sum())
-    filtered_airports = non_heliport_airports.loc[
-        non_heliport_airports["type"].ne("seaplane_base")
-    ].copy()
+    # DSA optimization: use set-backed vectorized membership in O(n + k), where
+    # k is the number of excluded types, avoiding chained intermediate filters.
+    excluded_type_mask = airports_with_iata["type"].isin(EXCLUDED_TYPES)
+    filtered_airports = airports_with_iata.loc[excluded_type_mask.eq(False)].copy()
 
     removed_count = total_airports - len(filtered_airports)
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     filtered_airports.to_csv(OUTPUT_PATH, index=False)
+
+    kept_type_counts = filtered_airports["type"].value_counts().sort_index()
 
     print("Airport filtering complete")
     print(f"Input file: {INPUT_PATH}")
@@ -53,7 +57,7 @@ def main() -> None:
     print(f"- Seaplane base type: {removed_seaplane_base_count}")
     print()
     print("Breakdown by type of kept airports:")
-    for airport_type, count in filtered_airports["type"].value_counts().sort_index().items():
+    for airport_type, count in kept_type_counts.items():
         print(f"- {airport_type}: {count}")
 
 

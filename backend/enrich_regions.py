@@ -11,27 +11,29 @@ OUTPUT_PATH = ROOT_DIR / "data" / "enriched_airports.csv"
 
 def main() -> None:
     airports = pd.read_csv(AIRPORTS_PATH, dtype=str, keep_default_na=False)
-    regions = pd.read_csv(REGIONS_PATH, dtype=str, keep_default_na=False)
+    regions = pd.read_csv(
+        REGIONS_PATH,
+        dtype=str,
+        keep_default_na=False,
+        usecols=["code", "name"],
+    )
 
     if "region_name" in airports.columns:
         airports = airports.drop(columns=["region_name"])
 
-    region_names = regions[["code", "name"]].rename(columns={"name": "region_name"})
-    enriched_airports = airports.merge(
-        region_names,
-        how="left",
-        left_on="iso_region",
-        right_on="code",
-    )
-    enriched_airports = enriched_airports.drop(columns=["code"])
+    # DSA optimization: use regions.code as a hash lookup table for O(n + m)
+    # enrichment. This avoids merge overhead and avoids using non-unique
+    # local_code values.
+    region_name_by_code = regions.drop_duplicates("code").set_index("code")["name"]
+    airports["region_name"] = airports["iso_region"].map(region_name_by_code)
 
-    matched_count = int(enriched_airports["region_name"].fillna("").str.strip().ne("").sum())
-    unmatched_count = len(enriched_airports) - matched_count
+    matched_count = int(airports["region_name"].fillna("").str.strip().ne("").sum())
+    unmatched_count = len(airports) - matched_count
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    enriched_airports.to_csv(OUTPUT_PATH, index=False)
+    airports.to_csv(OUTPUT_PATH, index=False)
 
-    examples = enriched_airports[["iso_region", "region_name"]].head(5)
+    examples = airports[["iso_region", "region_name"]].head(5)
 
     print("Region enrichment complete")
     print(f"Input airports file: {AIRPORTS_PATH}")
