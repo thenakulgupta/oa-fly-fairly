@@ -11,3 +11,5 @@ python build_region_mapping.py
 python build_city_groups.py
 
 docker-compose up -d
+
+python index_airports.py
