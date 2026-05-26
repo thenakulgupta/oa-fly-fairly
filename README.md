@@ -13,3 +13,5 @@ python build_city_groups.py
 docker-compose up -d
 
 python index_airports.py
+
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
