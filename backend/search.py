@@ -1,4 +1,5 @@
 from collections import defaultdict
+from bisect import bisect_left
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -24,6 +25,7 @@ COLLECTION_NAME = "airports"
 FUZZY_CANDIDATE_LIMIT = 20
 FINAL_RESULT_LIMIT = 10
 STATS_PAGE_SIZE = 250
+COMMON_QUERY_SUFFIXES = ("a", "e", "h", "i", "n", "o", "s", "u", "y")
 MATCH_TYPE_ORDER = [
     "iata_exact",
     "city_group_match",
@@ -121,7 +123,11 @@ class TypesenseHttpClient:
             {
                 "q": query,
                 "query_by": "search_text",
-                "num_typos": 2,
+                "num_typos": "2",
+                "prefix": "true",
+                "typo_tokens_threshold": 1,
+                "min_len_1typo": 3,
+                "min_len_2typo": 5,
                 "sort_by": "priority:desc",
                 "per_page": limit,
             }
@@ -191,6 +197,7 @@ class AirportSearch:
         self.airports_by_region: dict[str, list[str]] = {}
         self.airports_by_search_token: dict[str, list[str]] = {}
         self.airports_by_search_prefix: dict[str, list[str]] = {}
+        self.city_prefix_entries: list[tuple[str, str]] = []
         self.total_countries = 0
         self.total_regions = 0
 
@@ -213,6 +220,7 @@ class AirportSearch:
         self.airports_by_region = self._build_region_index(region_mapping)
         self.airports_by_search_token = self._build_search_token_index(documents)
         self.airports_by_search_prefix = self._build_search_prefix_index(documents)
+        self.city_prefix_entries = self._build_city_prefix_entries(documents)
         self.total_countries = count_csv_data_rows(COUNTRIES_PATH)
         self.total_regions = count_csv_data_rows(REGIONS_PATH)
         self.connected = self.typesense.health()
@@ -270,6 +278,18 @@ class AirportSearch:
             for prefix, iata_codes in airports_by_prefix.items()
         }
 
+    def _build_city_prefix_entries(self, documents: list[dict]) -> list[tuple[str, str]]:
+        city_entries: set[tuple[str, str]] = set()
+
+        for document in documents:
+            for city_term in self._city_terms(document):
+                city_entries.add((city_term, document["iata"]))
+
+        # DSA requirement: keep city terms sorted so prefix lookup can jump to
+        # the matching range with binary search in O(log n), then scan only
+        # matching city-prefix rows instead of all airports.
+        return sorted(city_entries)
+
     def _sort_iata_codes_by_priority(self, iata_codes: list[str]) -> list[str]:
         return sorted(
             iata_codes,
@@ -280,6 +300,7 @@ class AirportSearch:
     def search(self, query: str, limit: int = 10) -> dict:
         raw_query = query.strip()
         normalized_query = normalize_query(raw_query)
+        query_variants = self._query_variants(normalized_query)
         uppercase_query = raw_query.upper()
         result_limit = min(max(1, limit), FINAL_RESULT_LIMIT)
 
@@ -329,7 +350,16 @@ class AirportSearch:
                 "region_match",
             )
 
-        fuzzy_documents = self._fuzzy_documents(normalized_query)
+        city_prefix_iata_codes = self._city_prefix_iata_codes(query_variants)
+        if city_prefix_iata_codes:
+            self._add_iata_candidates(
+                candidates_by_iata,
+                seen_iata,
+                city_prefix_iata_codes,
+                "fuzzy_match",
+            )
+
+        fuzzy_documents = self._fuzzy_documents(query_variants)
         self._add_document_candidates(
             candidates_by_iata,
             seen_iata,
@@ -339,7 +369,7 @@ class AirportSearch:
 
         sorted_candidates = sorted(
             candidates_by_iata.values(),
-            key=lambda candidate: self._candidate_sort_key(candidate, normalized_query),
+            key=lambda candidate: self._candidate_sort_key(candidate, query_variants),
             reverse=True,
         )
         results = [
@@ -449,25 +479,39 @@ class AirportSearch:
 
         candidates_by_iata[iata]["match_types"].add(match_type)
 
-    def _fuzzy_documents(self, normalized_query: str) -> list[dict]:
-        fuzzy_documents: list[dict] = []
+    def _fuzzy_documents(self, query_variants: list[str]) -> list[dict]:
+        fuzzy_documents_by_iata: dict[str, dict] = {}
 
-        try:
-            fuzzy_documents = self.typesense.fuzzy_search(
-                normalized_query,
-                FUZZY_CANDIDATE_LIMIT,
-            )
-        except (HTTPError, URLError, TimeoutError, OSError):
-            fuzzy_documents = []
+        for query_variant in query_variants:
+            try:
+                fuzzy_documents = self.typesense.fuzzy_search(
+                    query_variant,
+                    FUZZY_CANDIDATE_LIMIT,
+                )
+            except (HTTPError, URLError, TimeoutError, OSError):
+                fuzzy_documents = []
 
-        fallback_iata_codes = self._local_fuzzy_iata_codes(normalized_query)
+            for document in fuzzy_documents:
+                iata = document.get("iata")
+                if iata:
+                    fuzzy_documents_by_iata[iata] = document
+
+        fallback_iata_codes: list[str] = []
+        for query_variant in query_variants:
+            fallback_iata_codes.extend(self._local_fuzzy_iata_codes(query_variant))
+
         fallback_documents = [
             self.airport_by_iata[iata_code]
-            for iata_code in fallback_iata_codes
+            for iata_code in dict.fromkeys(fallback_iata_codes)
             if iata_code in self.airport_by_iata
         ]
 
-        return fuzzy_documents + fallback_documents
+        reranked_documents = list(fuzzy_documents_by_iata.values()) + fallback_documents
+        return sorted(
+            reranked_documents,
+            key=lambda document: self._document_sort_key(document, query_variants),
+            reverse=True,
+        )
 
     def _local_fuzzy_iata_codes(self, normalized_query: str) -> list[str]:
         search_token_iata_codes = self.airports_by_search_token.get(normalized_query, [])
@@ -478,31 +522,88 @@ class AirportSearch:
         iata_codes = search_token_iata_codes + search_prefix_iata_codes
         return self._sort_iata_codes_by_priority(list(dict.fromkeys(iata_codes)))
 
-    def _candidate_sort_key(self, candidate: dict, normalized_query: str) -> tuple[int, int]:
-        priority = int(candidate["document"].get("priority", 0))
+    def _candidate_sort_key(self, candidate: dict, query_variants: list[str]) -> tuple[int, int, int]:
+        document = candidate["document"]
+        priority = int(document.get("priority", 0))
+        match_types = candidate["match_types"]
+        search_step_boost = 1_000 if "iata_exact" in match_types else 0
 
-        if len(normalized_query) > 2:
-            return (priority, 0)
+        if "city_group_match" in match_types:
+            search_step_boost += 500
 
-        best_prefix_length = self._best_prefix_field_length(
-            candidate["document"],
-            normalized_query,
+        return (
+            priority + self._city_match_boost(document, query_variants) + search_step_boost,
+            priority,
+            -len(document.get("name") or ""),
         )
-        prefix_score = 0 if best_prefix_length is None else 10_000 - best_prefix_length
-        return (prefix_score, priority)
 
-    def _best_prefix_field_length(self, document: dict, normalized_query: str) -> int | None:
-        values = [
-            document.get("city") or "",
-            document.get("region") or "",
-            *(document.get("city_aliases") or []),
-        ]
-        prefix_lengths = [
-            len(normalized_value)
-            for value in values
-            if (normalized_value := normalize_query(value)).startswith(normalized_query)
-        ]
-        return min(prefix_lengths) if prefix_lengths else None
+    def _document_sort_key(self, document: dict, query_variants: list[str]) -> tuple[int, int]:
+        priority = int(document.get("priority", 0))
+        return (
+            priority + self._city_match_boost(document, query_variants),
+            priority,
+        )
+
+    def _city_match_boost(self, document: dict, query_variants: list[str]) -> int:
+        city_terms = self._city_terms(document)
+        exact_city_match = any(query_variant in city_terms for query_variant in query_variants)
+        if exact_city_match:
+            return 20
+
+        partial_city_match = any(
+            city_term.startswith(query_variant)
+            for city_term in city_terms
+            for query_variant in query_variants
+            if query_variant
+        )
+        return 10 if partial_city_match else 0
+
+    def _query_variants(self, normalized_query: str) -> list[str]:
+        variants = [normalized_query]
+
+        if normalized_query:
+            variants.extend(f"{normalized_query}{suffix}" for suffix in COMMON_QUERY_SUFFIXES)
+
+            if normalized_query.endswith("i"):
+                variants.append(f"{normalized_query[:-1]}hi")
+
+            if normalized_query.endswith("h"):
+                variants.append(f"{normalized_query}i")
+
+        # DSA optimization: ordered dict-style dedup keeps query expansion small
+        # and makes every downstream lookup run once per unique normalized query.
+        return [variant for variant in dict.fromkeys(variants) if variant]
+
+    def _city_prefix_iata_codes(self, query_variants: list[str]) -> list[str]:
+        matching_iata_codes: list[str] = []
+
+        for query_variant in query_variants:
+            if len(query_variant) < 2:
+                continue
+
+            start = bisect_left(self.city_prefix_entries, (query_variant, ""))
+            end = bisect_left(self.city_prefix_entries, (f"{query_variant}\U0010ffff", ""))
+            matching_iata_codes.extend(
+                iata_code for _, iata_code in self.city_prefix_entries[start:end]
+            )
+
+        return self._sort_iata_codes_by_priority(list(dict.fromkeys(matching_iata_codes)))
+
+    def _city_terms(self, document: dict) -> set[str]:
+        terms: set[str] = set()
+        raw_terms = [document.get("city") or "", *(document.get("city_aliases") or [])]
+
+        for raw_term in raw_terms:
+            normalized_term = normalize_query(raw_term)
+            if not normalized_term:
+                continue
+
+            terms.add(normalized_term)
+            words = normalized_term.split()
+            for index in range(len(words)):
+                terms.add(" ".join(words[index:]))
+
+        return terms
 
     def _search_by_prefixes(self, normalized_query: str) -> list[str]:
         query_tokens = [token for token in normalized_query.split() if len(token) >= 2]

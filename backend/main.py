@@ -148,7 +148,7 @@ def health(request: Request, response: Response):
 
 
 @app.get("/stats")
-@limiter.limit("10/minute")
+@limiter.limit("20/minute")
 def stats(request: Request, response: Response):
     rate_limit = success_rate_limit_block(request, response)
 
