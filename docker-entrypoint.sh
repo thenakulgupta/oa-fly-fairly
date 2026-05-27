@@ -24,12 +24,12 @@ PY
 
 python backend/download_data.py
 
-python filter_airports.py
-python enrich_countries.py
-python enrich_regions.py
-python enrich_aliases.py
-python build_region_mapping.py
-python build_city_groups.py
+python backend/filter_airports.py
+python backend/enrich_countries.py
+python backend/enrich_regions.py
+python backend/enrich_aliases.py
+python backend/build_region_mapping.py
+python backend/build_city_groups.py
 python backend/index_airports.py
 
 exec uvicorn backend.main:app --host 0.0.0.0 --port "${PORT:-3004}"
