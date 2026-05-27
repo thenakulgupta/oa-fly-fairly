@@ -30,6 +30,24 @@ function flagEmoji(countryCode) {
     .replace(/./g, (letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)));
 }
 
+function formatPopulation(value) {
+  const population = Number(value);
+
+  if (!Number.isFinite(population) || population <= 0) {
+    return null;
+  }
+
+  if (population >= 1_000_000) {
+    return `${(population / 1_000_000).toFixed(1).replace(".0", "")}M`;
+  }
+
+  if (population >= 1_000) {
+    return `${Math.round(population / 1_000)}K`;
+  }
+
+  return population.toLocaleString();
+}
+
 export default function ResultCard({ result, highlighted, onMouseEnter, onOpenDetail }) {
   const [expanded, setExpanded] = useState(false);
   const matchTypes = result.match_types ?? [];
@@ -38,6 +56,7 @@ export default function ResultCard({ result, highlighted, onMouseEnter, onOpenDe
   const typeIcon = TYPE_ICONS[result.type] ?? "✈";
   const typeLabel = TYPE_LABELS[result.type] ?? "Airport";
   const flag = flagEmoji(result.country_code);
+  const populationLabel = formatPopulation(result.city_population);
 
   function handleExpand(event) {
     event.stopPropagation();
@@ -74,6 +93,13 @@ export default function ResultCard({ result, highlighted, onMouseEnter, onOpenDe
             {flag && <span>{flag}</span>}
             {result.country && <span>{result.country}</span>}
           </p>
+
+          {(result.is_capital || populationLabel) && (
+            <div className="result-meta-tags">
+              {result.is_capital && <span>🏛 Capital City</span>}
+              {populationLabel && <span>👥 {populationLabel} pop</span>}
+            </div>
+          )}
 
           <div className="result-tags">
             {result.region && <span className="region-pill">{result.region}</span>}

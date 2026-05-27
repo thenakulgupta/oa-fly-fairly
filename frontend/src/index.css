@@ -603,6 +603,26 @@ button {
   font-weight: 600;
 }
 
+.result-meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.result-meta-tags span {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--success);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .result-tags {
   display: flex;
   flex-wrap: wrap;
@@ -885,6 +905,39 @@ button {
   margin: 0;
   font-size: 15px;
   font-weight: 900;
+}
+
+.detail-map-section {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.maps-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-2);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.maps-link:hover {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+.maps-link-disabled {
+  color: var(--muted);
+}
+
+.maps-link-disabled:hover {
+  color: var(--muted);
+  transform: none;
 }
 
 .alias-strip {

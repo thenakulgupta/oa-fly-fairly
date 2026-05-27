@@ -53,6 +53,36 @@ def count_csv_data_rows(path: Path) -> int:
         return sum(1 for _ in reader)
 
 
+def optional_float(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def optional_int(value: object) -> int | None:
+    if value in (None, ""):
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def bool_value(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+
+    if value in (None, ""):
+        return False
+
+    return str(value).casefold() in {"true", "1", "yes", "y"}
+
+
 class TypesenseHttpClient:
     def __init__(self) -> None:
         self.base_url = f"{TYPESENSE_PROTOCOL}://{TYPESENSE_HOST}:{TYPESENSE_PORT}"
@@ -131,6 +161,21 @@ class TypesenseHttpClient:
             "GET",
             f"/collections/{COLLECTION_NAME}/documents/search?{params}",
         )
+
+    def count_documents(self, filter_by: str) -> int:
+        params = urlencode(
+            {
+                "q": "*",
+                "query_by": "search_text",
+                "filter_by": filter_by,
+                "per_page": 1,
+            }
+        )
+        response = self.request(
+            "GET",
+            f"/collections/{COLLECTION_NAME}/documents/search?{params}",
+        )
+        return int(response.get("found", 0))
 
 
 class AirportSearch:
@@ -319,6 +364,7 @@ class AirportSearch:
             "total_airports": int(facet_response.get("found", 0)),
             "total_countries": len(facet_counts.get("country_code", {})),
             "total_regions": len(facet_counts.get("region", {})),
+            "capital_airports": self.typesense.count_documents("is_capital:=true"),
             "by_type": facet_counts.get("type", {}),
             "multi_airport_cities": len(self.city_group_by_code),
             "airports_with_aliases": self._count_airports_with_aliases(
@@ -491,6 +537,10 @@ class AirportSearch:
             "region": region,
             "type": document.get("type") or "",
             "priority": int(document.get("priority", 0)),
+            "latitude": optional_float(document.get("latitude")),
+            "longitude": optional_float(document.get("longitude")),
+            "is_capital": bool_value(document.get("is_capital")),
+            "city_population": optional_int(document.get("city_population")),
             "match_types": ordered_match_types,
             "city_aliases": document.get("city_aliases") or [],
             "is_multi_airport_city": False,

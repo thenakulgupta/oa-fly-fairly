@@ -36,6 +36,10 @@ AIRPORT_SCHEMA = {
         {"name": "multi_airport_city", "type": "string", "optional": True},
         {"name": "type", "type": "string", "facet": True},
         {"name": "priority", "type": "int32"},
+        {"name": "latitude", "type": "float", "optional": True},
+        {"name": "longitude", "type": "float", "optional": True},
+        {"name": "is_capital", "type": "bool", "optional": True},
+        {"name": "city_population", "type": "int64", "optional": True},
         {"name": "search_text", "type": "string"},
     ],
     "default_sorting_field": "priority",
@@ -49,6 +53,32 @@ def clean_text(value: object) -> str:
 def optional_text(value: object) -> str | None:
     text = clean_text(value)
     return text or None
+
+
+def optional_float(value: object) -> float | None:
+    text = clean_text(value)
+    if not text:
+        return None
+
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def optional_int(value: object) -> int | None:
+    text = clean_text(value)
+    if not text:
+        return None
+
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def parse_bool(value: object) -> bool:
+    return clean_text(value).casefold() in {"true", "1", "yes", "y"}
 
 
 def parse_aliases(raw_aliases: object) -> list[str]:
@@ -142,6 +172,10 @@ def build_airport_documents(
             "multi_airport_city": city_group_by_iata.get(iata),
             "type": clean_text(airport.type),
             "priority": int(airport.priority),
+            "latitude": optional_float(airport.latitude_deg),
+            "longitude": optional_float(airport.longitude_deg),
+            "is_capital": parse_bool(airport.is_capital),
+            "city_population": optional_int(airport.city_population),
             "search_text": build_search_text([iata, city, city_aliases, name, country, region]),
         }
         documents.append(document)

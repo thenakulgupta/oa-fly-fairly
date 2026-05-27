@@ -20,6 +20,35 @@ function typeLabel(type) {
   return type?.replaceAll("_", " ") || "Airport";
 }
 
+function formatPopulation(value) {
+  const population = Number(value);
+
+  if (!Number.isFinite(population) || population <= 0) {
+    return "—";
+  }
+
+  if (population >= 1_000_000) {
+    return `${(population / 1_000_000).toFixed(1).replace(".0", "")}M`;
+  }
+
+  if (population >= 1_000) {
+    return `${Math.round(population / 1_000)}K`;
+  }
+
+  return population.toLocaleString();
+}
+
+function formatCoordinate(value, positiveSuffix, negativeSuffix) {
+  const coordinate = Number(value);
+
+  if (!Number.isFinite(coordinate)) {
+    return "—";
+  }
+
+  const suffix = coordinate >= 0 ? positiveSuffix : negativeSuffix;
+  return `${Math.abs(coordinate).toFixed(4)}°${suffix}`;
+}
+
 export default function AirportDetail({ airport, onClose }) {
   if (!airport) {
     return null;
@@ -29,6 +58,10 @@ export default function AirportDetail({ airport, onClose }) {
   const matchTypes = airport.match_types ?? [];
   const subAirports = airport.sub_airports ?? [];
   const flag = flagEmoji(airport.country_code);
+  const hasCoordinates = Number.isFinite(Number(airport.latitude)) && Number.isFinite(Number(airport.longitude));
+  const mapsUrl = hasCoordinates
+    ? `https://www.google.com/maps?q=${airport.latitude},${airport.longitude}`
+    : null;
 
   return (
     <div className="detail-layer" role="dialog" aria-modal="true" aria-label={`${airport.iata} details`}>
@@ -74,7 +107,38 @@ export default function AirportDetail({ airport, onClose }) {
             <span>📡 Matched via</span>
             <strong>{matchTypes.map((type) => MATCH_LABELS[type] ?? type).join(", ") || "Search"}</strong>
           </div>
+          <div className="info-tile">
+            <span>🌐 Latitude</span>
+            <strong>{formatCoordinate(airport.latitude, "N", "S")}</strong>
+          </div>
+          <div className="info-tile">
+            <span>🌐 Longitude</span>
+            <strong>{formatCoordinate(airport.longitude, "E", "W")}</strong>
+          </div>
+          <div className="info-tile">
+            <span>👑 Capital City</span>
+            <strong>{airport.is_capital ? "👑 Yes" : "No"}</strong>
+          </div>
+          <div className="info-tile">
+            <span>👥 City Population</span>
+            <strong>{formatPopulation(airport.city_population)}</strong>
+          </div>
         </div>
+
+        <section className="detail-section detail-map-section">
+          <h3>Location</h3>
+          {mapsUrl ? (
+            <a className="maps-link" href={mapsUrl} target="_blank" rel="noreferrer">
+              <span aria-hidden="true">📍</span>
+              View on Google Maps →
+            </a>
+          ) : (
+            <span className="maps-link maps-link-disabled">
+              <span aria-hidden="true">📍</span>
+              Coordinates unavailable
+            </span>
+          )}
+        </section>
 
         <section className="detail-section">
           <h3>Also known as</h3>

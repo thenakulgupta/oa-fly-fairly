@@ -30,7 +30,6 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [selectedAirport, setSelectedAirport] = useState(null);
-  const [latestRateLimit, setLatestRateLimit] = useState(null);
   const [stats, setStats] = useState(null);
   const [statsStatus, setStatsStatus] = useState("loading");
 
@@ -74,10 +73,6 @@ export default function App() {
   const handleTestSelect = useCallback((term) => {
     setQuery(term);
     setActiveSearch(term);
-  }, []);
-
-  const handleResponse = useCallback((payload) => {
-    setLatestRateLimit(payload?.rate_limit ?? null);
   }, []);
 
   const isStatsLoading = statsStatus === "loading";
@@ -136,6 +131,12 @@ export default function App() {
             isLoading={isStatsLoading}
           />
           <StatBadge
+            icon="🏛"
+            value={formatStat(stats?.capital_airports)}
+            label="Capital Cities"
+            isLoading={isStatsLoading}
+          />
+          <StatBadge
             icon="🔤"
             value={formatStat(stats?.airports_with_aliases)}
             label="With Aliases"
@@ -149,7 +150,6 @@ export default function App() {
           value={query}
           onQueryChange={handleQueryChange}
           onResultSelect={setSelectedAirport}
-          onResponse={handleResponse}
         />
       </section>
 
