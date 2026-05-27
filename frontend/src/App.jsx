@@ -162,7 +162,6 @@ export default function App() {
 
       <AirportDetail
         airport={selectedAirport}
-        rateLimit={latestRateLimit}
         onClose={() => setSelectedAirport(null)}
       />
     </main>

@@ -936,28 +936,6 @@ button {
   font-size: 13px;
 }
 
-.detail-rate {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px 16px;
-  margin-top: auto;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface);
-  padding: 16px;
-}
-
-.detail-rate span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.detail-rate strong {
-  color: var(--text);
-  font-size: 13px;
-}
-
 .footer {
   display: flex;
   flex-wrap: wrap;

@@ -20,7 +20,7 @@ function typeLabel(type) {
   return type?.replaceAll("_", " ") || "Airport";
 }
 
-export default function AirportDetail({ airport, rateLimit, onClose }) {
+export default function AirportDetail({ airport, onClose }) {
   if (!airport) {
     return null;
   }
@@ -101,14 +101,6 @@ export default function AirportDetail({ airport, rateLimit, onClose }) {
           </section>
         )}
 
-        <footer className="detail-rate">
-          <span>Remaining requests</span>
-          <strong>
-            {rateLimit?.remaining ?? "–"} / {rateLimit?.limit ?? "–"}
-          </strong>
-          <span>Reset countdown</span>
-          <strong>{rateLimit?.retry_after_remaining ?? 60}s</strong>
-        </footer>
       </aside>
     </div>
   );
