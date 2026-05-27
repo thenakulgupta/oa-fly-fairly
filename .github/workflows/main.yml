@@ -1,0 +1,49 @@
+name: Deploy Docker App
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  IMAGE_NAME: registry.gitlab.com/nakul-gupta/airport-search
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      #################################################
+      # Checkout Code
+      #################################################
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      #################################################
+      # Login to GitLab Container Registry
+      #################################################
+
+      - name: Login to GitLab Registry
+        run: |
+          echo "${{ secrets.GITLAB_REGISTRY_PASSWORD }}" | docker login registry.gitlab.com \
+            -u "${{ secrets.GITLAB_REGISTRY_USERNAME }}" \
+            --password-stdin
+
+      #################################################
+      # Build Docker Image
+      #################################################
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -f backend/Dockerfile \
+            -t ${{ env.IMAGE_NAME }}:latest .
+
+      #################################################
+      # Push Docker Image
+      #################################################
+
+      - name: Push Docker Image
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:latest

@@ -2,6 +2,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import json
+import os
 
 import pandas as pd
 
@@ -13,10 +14,13 @@ AIRPORT_TO_CITY_GROUP_PATH = ROOT_DIR / "data" / "airport_to_city_group.json"
 REGION_MAPPING_PATH = ROOT_DIR / "data" / "region_mapping.json"
 OUTPUT_PATH = ROOT_DIR / "data" / "airports_index.json"
 
-TYPESENSE_HOST = "localhost"
-TYPESENSE_PORT = 8108
-TYPESENSE_PROTOCOL = "http"
-TYPESENSE_API_KEY = "nakulgupta-1076787674878372323dsff"
+TYPESENSE_HOST = os.environ.get("TYPESENSE_HOST", "localhost")
+TYPESENSE_PORT = int(os.environ.get("TYPESENSE_PORT", "8108"))
+TYPESENSE_PROTOCOL = os.environ.get("TYPESENSE_PROTOCOL", "http")
+TYPESENSE_API_KEY = os.environ.get(
+    "TYPESENSE_API_KEY",
+    "nakulgupta-1076787674878372323dsff",
+)
 COLLECTION_NAME = "airports"
 BATCH_SIZE = 100
 PROGRESS_INTERVAL = 500

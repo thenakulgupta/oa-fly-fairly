@@ -3,9 +3,10 @@ import AirportDetail from "./components/AirportDetail";
 import SearchBox from "./components/SearchBox";
 import TestPanel from "./components/TestPanel";
 import ThemeToggle from "./components/ThemeToggle";
+import API_BASE_URL from "./api";
 import "./index.css";
 
-const STATS_ENDPOINT = "http://localhost:8000/stats";
+const STATS_ENDPOINT = `${API_BASE_URL}/stats`;
 
 function formatStat(value) {
   return typeof value === "number" ? value.toLocaleString() : "—";

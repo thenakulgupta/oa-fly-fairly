@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import API_BASE_URL from "../api";
 import ResultCard from "./ResultCard";
 
-const API_URL = "http://localhost:8000/search";
+const API_URL = `${API_BASE_URL}/search`;
 const DEBOUNCE_MS = 300;
 
 function RateLimitBar({ rateLimit }) {

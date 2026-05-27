@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 import csv
 import json
+import os
 import unicodedata
 
 
@@ -17,10 +18,13 @@ REGION_MAPPING_PATH = ROOT_DIR / "data" / "region_mapping.json"
 COUNTRIES_PATH = ROOT_DIR / "data" / "countries.csv"
 REGIONS_PATH = ROOT_DIR / "data" / "regions.csv"
 
-TYPESENSE_HOST = "localhost"
-TYPESENSE_PORT = 8108
-TYPESENSE_PROTOCOL = "http"
-TYPESENSE_API_KEY = "nakulgupta-1076787674878372323dsff"
+TYPESENSE_HOST = os.environ.get("TYPESENSE_HOST", "localhost")
+TYPESENSE_PORT = int(os.environ.get("TYPESENSE_PORT", "8108"))
+TYPESENSE_PROTOCOL = os.environ.get("TYPESENSE_PROTOCOL", "http")
+TYPESENSE_API_KEY = os.environ.get(
+    "TYPESENSE_API_KEY",
+    "nakulgupta-1076787674878372323dsff",
+)
 COLLECTION_NAME = "airports"
 FUZZY_CANDIDATE_LIMIT = 20
 FINAL_RESULT_LIMIT = 10

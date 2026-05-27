@@ -162,41 +162,19 @@ python build_region_mapping.py
 python build_city_groups.py
 ```
 
-### 6. Start Typesense with Docker Compose
+### 6. Build and start the application with Docker Compose
 
 The Compose definition is located in `backend/`, so run this while still in that directory.
 
 ```bash
-docker-compose up -d
+docker compose up --build -d
 ```
 
-### 7. Index airports into Typesense
+Compose starts Typesense on its internal network, builds the React frontend, and starts the FastAPI application container. The application waits for Typesense and indexes the generated airport data before it begins accepting requests.
 
-```bash
-python index_airports.py
-```
+### 7. Open the application
 
-### 8. Start the backend API
-
-```bash
-./venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API is now available at `http://localhost:8000`.
-
-### 9. Start the frontend
-
-In a new terminal, from the repository root:
-
-```bash
-cd frontend/
-npm install
-npm run dev
-```
-
-### 10. Open the application
-
-Visit [http://localhost:5173](http://localhost:5173) in a browser.
+Visit [http://localhost:3004](http://localhost:3004) in a browser. API endpoints are served from the same address, for example `http://localhost:3004/health`. Typesense port `8108` is only available to the application container, not published to the host.
 
 ## API Endpoints
 

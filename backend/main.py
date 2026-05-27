@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 import time
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -161,3 +163,9 @@ def stats(request: Request, response: Response):
             status_code=503,
             detail=f"Airport stats unavailable: {error}",
         ) from error
+
+
+FRONTEND_DIST_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="frontend")

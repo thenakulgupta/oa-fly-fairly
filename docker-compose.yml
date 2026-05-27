@@ -1,0 +1,30 @@
+services:
+  typesense:
+    image: typesense/typesense:30.2
+    container_name: typesense
+    expose:
+      - "8108"
+    volumes:
+      - ./typesense-data:/data
+    command: >
+      --data-dir /data
+      --api-key=nakulgupta-1076787674878372323dsff
+      --enable-cors
+    restart: unless-stopped
+
+  airport-search:
+    container_name: airport-search
+    image: registry.gitlab.com/nakul-gupta/airport-search:latest
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      - typesense
+    environment:
+      TYPESENSE_HOST: typesense
+      TYPESENSE_PORT: "8108"
+      TYPESENSE_API_KEY: nakulgupta-1076787674878372323dsff
+      PORT: "3004"
+    ports:
+      - "3004:3004"
+    restart: unless-stopped
