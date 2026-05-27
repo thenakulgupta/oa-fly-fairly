@@ -1,15 +1,70 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AirportDetail from "./components/AirportDetail";
 import SearchBox from "./components/SearchBox";
 import TestPanel from "./components/TestPanel";
 import ThemeToggle from "./components/ThemeToggle";
 import "./index.css";
 
+const STATS_ENDPOINT = "http://localhost:8000/stats";
+
+function formatStat(value) {
+  return typeof value === "number" ? value.toLocaleString() : "—";
+}
+
+function StatBadge({ icon, value, label, isLoading }) {
+  return (
+    <span className="stat-badge" aria-busy={isLoading}>
+      <span aria-hidden="true">{icon}</span>
+      {isLoading ? (
+        <span className="stat-skeleton" />
+      ) : (
+        <span className="stat-content stat-content-loaded">
+          {value} {label}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function App() {
   const [query, setQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [selectedAirport, setSelectedAirport] = useState(null);
   const [latestRateLimit, setLatestRateLimit] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [statsStatus, setStatsStatus] = useState("loading");
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function fetchStats() {
+      try {
+        const response = await fetch(STATS_ENDPOINT);
+
+        if (!response.ok) {
+          throw new Error(`Stats request failed with ${response.status}`);
+        }
+
+        const payload = await response.json();
+
+        if (isActive) {
+          setStats(payload);
+          setStatsStatus("ready");
+        }
+      } catch {
+        if (isActive) {
+          setStats(null);
+          setStatsStatus("error");
+        }
+      }
+    }
+
+    fetchStats();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const handleQueryChange = useCallback((nextQuery) => {
     setQuery(nextQuery);
@@ -24,6 +79,8 @@ export default function App() {
   const handleResponse = useCallback((payload) => {
     setLatestRateLimit(payload?.rate_limit ?? null);
   }, []);
+
+  const isStatsLoading = statsStatus === "loading";
 
   return (
     <main className="app-shell">
@@ -59,9 +116,31 @@ export default function App() {
         </p>
 
         <div className="stat-row" aria-label="Search platform statistics">
-          <span className="stat-badge">✈ 8,805 Airports</span>
-          <span className="stat-badge">🌍 249 Countries</span>
-          <span className="stat-badge">⚡ &lt;50ms Search</span>
+          <StatBadge
+            icon="✈"
+            value={formatStat(stats?.total_airports)}
+            label="Airports"
+            isLoading={isStatsLoading}
+          />
+          <StatBadge
+            icon="🌍"
+            value={formatStat(stats?.total_countries)}
+            label="Countries"
+            isLoading={isStatsLoading}
+          />
+          <StatBadge icon="⚡" value="<50ms" label="Search" isLoading={false} />
+          <StatBadge
+            icon="🏙"
+            value={formatStat(stats?.multi_airport_cities)}
+            label="City Groups"
+            isLoading={isStatsLoading}
+          />
+          <StatBadge
+            icon="🔤"
+            value={formatStat(stats?.airports_with_aliases)}
+            label="With Aliases"
+            isLoading={isStatsLoading}
+          />
         </div>
       </section>
 

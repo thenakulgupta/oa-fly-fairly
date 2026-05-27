@@ -311,6 +311,7 @@ button {
 
 .stat-badge {
   display: inline-flex;
+  gap: 7px;
   min-height: 38px;
   align-items: center;
   border: 1px solid var(--border);
@@ -321,6 +322,31 @@ button {
   font-size: 13px;
   font-weight: 800;
   box-shadow: 0 14px 34px var(--shadow);
+}
+
+.stat-content {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.stat-content-loaded {
+  animation: statFadeIn 220ms ease both;
+}
+
+.stat-skeleton {
+  width: 116px;
+  height: 15px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--glass),
+      var(--glass-strong),
+      var(--glass)
+    );
+  background-size: 240% 100%;
+  animation: skeletonSweep 1.1s ease-in-out infinite;
 }
 
 .search-section {
@@ -956,6 +982,28 @@ button {
 
   100% {
     background-position: 0% 50%;
+  }
+}
+
+@keyframes skeletonSweep {
+  0% {
+    background-position: 120% 50%;
+  }
+
+  100% {
+    background-position: -120% 50%;
+  }
+}
+
+@keyframes statFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
