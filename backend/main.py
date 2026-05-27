@@ -102,7 +102,7 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://fly-fairly-online-assessment.nakulgupta.in", "https://fly-fairly-online-assessment.nakulgupta.in"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -165,7 +165,17 @@ def stats(request: Request, response: Response):
         ) from error
 
 
-FRONTEND_DIST_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+@app.get("/")
+@limiter.limit("10/minute")
+def home(request: Request, response: Response):
+    rate_limit = success_rate_limit_block(request, response)
 
-if FRONTEND_DIST_DIR.exists():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="frontend")
+    try:
+        result = {"message": "Welcome to Backend API server!"}
+        result["rate_limit"] = rate_limit
+        return result
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"unavailable: {error}",
+        ) from error
