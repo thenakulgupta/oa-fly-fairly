@@ -8,74 +8,63 @@ function RateLimitBar({ rateLimit }) {
   const limit = rateLimit?.limit ?? 30;
   const remaining = rateLimit?.remaining ?? limit;
   const percent = limit > 0 ? Math.max(0, Math.min(100, (remaining / limit) * 100)) : 0;
-  const level = remaining > 20 ? "good" : remaining > 10 ? "warn" : "danger";
+  const tone = remaining < 10 ? "danger" : remaining <= 20 ? "warn" : "good";
 
   return (
-    <div className="rate-limit" aria-label={`${remaining} of ${limit} requests remaining`}>
-      <div className="rate-limit-copy">
-        <span>{remaining} / {limit} requests remaining</span>
-        {rateLimit?.retry_after_remaining !== undefined && (
-          <span>Resets in {rateLimit.retry_after_remaining}s</span>
-        )}
+    <div className="search-rate-limit">
+      <div className="rate-copy">
+        <span>{remaining} / {limit} searches remaining this minute</span>
+        <span>{rateLimit?.retry_after_remaining ?? 60}s reset</span>
       </div>
-      <div className="rate-limit-track">
-        <span
-          className={`rate-limit-fill rate-limit-fill-${level}`}
-          style={{ width: `${percent}%` }}
-        />
+      <div className="rate-track" aria-hidden="true">
+        <span className={`rate-fill rate-fill-${tone}`} style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
 }
 
-export default function SearchBox({ value, onQueryChange, onResults }) {
+export default function SearchBox({ value, onQueryChange, onResultSelect, onResponse }) {
   const [results, setResults] = useState([]);
   const [rateLimit, setRateLimit] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const containerRef = useRef(null);
   const inputRef = useRef(null);
+  const shellRef = useRef(null);
 
-  const hasQuery = value.trim().length > 0;
-  const hasResults = results.length > 0;
-
-  const selectedResult = useMemo(() => {
-    if (highlightedIndex < 0 || highlightedIndex >= results.length) {
-      return null;
-    }
-    return results[highlightedIndex];
-  }, [highlightedIndex, results]);
+  const trimmedQuery = value.trim();
+  const hasQuery = trimmedQuery.length > 0;
+  const selectedResult = useMemo(() => results[highlightedIndex], [highlightedIndex, results]);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   useEffect(() => {
-    function handlePointerDown(event) {
-      if (!containerRef.current?.contains(event.target)) {
+    function closeOnOutsideClick(event) {
+      if (!shellRef.current?.contains(event.target)) {
         setIsOpen(false);
         setHighlightedIndex(-1);
       }
     }
 
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
   }, []);
 
   useEffect(() => {
-    const query = value.trim();
+    const query = trimmedQuery;
     const controller = new AbortController();
 
     if (!query) {
       setResults([]);
       setRateLimit(null);
-      setError("");
       setIsOpen(false);
       setIsLoading(false);
+      setError("");
       setHighlightedIndex(-1);
-      onResults?.({ total: 0, search_types: [] });
+      onResponse?.({ total: 0, search_types: [], rate_limit: null });
       return undefined;
     }
 
@@ -92,11 +81,12 @@ export default function SearchBox({ value, onQueryChange, onResults }) {
           throw new Error(payload?.error || payload?.detail || "Search failed");
         }
 
-        setResults(payload.results ?? []);
+        const nextResults = payload.results ?? [];
+        setResults(nextResults);
         setRateLimit(payload.rate_limit ?? null);
         setIsOpen(true);
-        setHighlightedIndex(payload.results?.length ? 0 : -1);
-        onResults?.(payload);
+        setHighlightedIndex(nextResults.length ? 0 : -1);
+        onResponse?.(payload);
       } catch (requestError) {
         if (requestError.name === "AbortError") {
           return;
@@ -107,7 +97,7 @@ export default function SearchBox({ value, onQueryChange, onResults }) {
         setIsOpen(true);
         setHighlightedIndex(-1);
         setError(requestError.message || "Search unavailable");
-        onResults?.({ total: 0, search_types: [] });
+        onResponse?.({ total: 0, search_types: [], rate_limit: null });
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -119,7 +109,7 @@ export default function SearchBox({ value, onQueryChange, onResults }) {
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [value, onResults]);
+  }, [trimmedQuery, onResponse]);
 
   function clearSearch() {
     onQueryChange("");
@@ -136,7 +126,7 @@ export default function SearchBox({ value, onQueryChange, onResults }) {
       return;
     }
 
-    onQueryChange(result.iata);
+    onResultSelect?.(result);
     setIsOpen(false);
     setHighlightedIndex(-1);
   }
@@ -148,18 +138,18 @@ export default function SearchBox({ value, onQueryChange, onResults }) {
       return;
     }
 
-    if (!isOpen && ["ArrowDown", "ArrowUp"].includes(event.key)) {
-      setIsOpen(true);
-    }
-
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      setIsOpen(true);
       setHighlightedIndex((current) => Math.min(current + 1, results.length - 1));
+      return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      setIsOpen(true);
       setHighlightedIndex((current) => Math.max(current - 1, 0));
+      return;
     }
 
     if (event.key === "Enter") {
@@ -169,56 +159,55 @@ export default function SearchBox({ value, onQueryChange, onResults }) {
   }
 
   return (
-    <div className="search-stack" ref={containerRef}>
-      <div className={`search-box ${isOpen ? "search-box-active" : ""}`}>
-        <span className="search-icon" aria-hidden="true" />
+    <div className="search-shell" ref={shellRef}>
+      <div className={`search-frame ${isOpen ? "search-frame-open" : ""}`}>
+        <span className="magnifier" aria-hidden="true">⌕</span>
         <input
           ref={inputRef}
+          className="search-input"
           value={value}
           onChange={(event) => onQueryChange(event.target.value)}
           onFocus={() => hasQuery && setIsOpen(true)}
           onKeyDown={handleKeyDown}
-          className="search-input"
+          placeholder="City, IATA code, region, or try a typo..."
           type="search"
-          placeholder="Search by city, airport, IATA, region, or alias"
           aria-label="Search airports"
           aria-expanded={isOpen}
-          aria-controls="airport-results"
+          aria-controls="search-results"
         />
-
-        <div className="search-actions">
-          {isLoading && <span className="spinner" aria-label="Loading search results" />}
-          {hasQuery && (
-            <button className="clear-button" type="button" onClick={clearSearch} aria-label="Clear search">
+        <div className="search-control">
+          {isLoading ? (
+            <span className="loader" aria-label="Loading" />
+          ) : hasQuery ? (
+            <button className="clear-search" type="button" onClick={clearSearch} aria-label="Clear search">
               ×
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {isOpen && (
-        <div className="results-dropdown" id="airport-results" role="listbox">
-          {error && <div className="empty-state">{error}</div>}
+      <RateLimitBar rateLimit={rateLimit} />
 
-          {!error && !isLoading && hasQuery && !hasResults && (
-            <div className="empty-state">No airports found</div>
+      {isOpen && (
+        <div className="results-popover" id="search-results" role="listbox">
+          {error && <div className="empty-results">{error}</div>}
+          {!error && !isLoading && hasQuery && results.length === 0 && (
+            <div className="empty-results">No matching airports yet</div>
           )}
 
-          {!error && hasResults && (
-            <div className="results-list">
+          {!error && results.length > 0 && (
+            <div className="results-stack">
               {results.map((result, index) => (
                 <ResultCard
-                  key={result.iata}
+                  key={`${result.iata}-${index}`}
                   result={result}
-                  highlighted={index === highlightedIndex}
+                  highlighted={highlightedIndex === index}
                   onMouseEnter={() => setHighlightedIndex(index)}
-                  onSelect={() => selectResult(result)}
+                  onOpenDetail={() => selectResult(result)}
                 />
               ))}
             </div>
           )}
-
-          {rateLimit && <RateLimitBar rateLimit={rateLimit} />}
         </div>
       )}
     </div>

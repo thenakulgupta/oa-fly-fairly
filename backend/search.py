@@ -407,6 +407,7 @@ class AirportSearch:
             "type": document.get("type") or "",
             "priority": int(document.get("priority", 0)),
             "match_types": ordered_match_types,
+            "city_aliases": document.get("city_aliases") or [],
             "is_multi_airport_city": False,
             "sub_airports": [],
         }

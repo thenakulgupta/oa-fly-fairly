@@ -1,21 +1,26 @@
 import { useState } from "react";
 
 const MATCH_LABELS = {
-  iata_exact: "IATA",
+  iata_exact: "Exact",
   city_exact: "City",
-  city_group_match: "Group",
-  fuzzy_match: "Fuzzy",
   region_match: "Region",
+  fuzzy_match: "Fuzzy",
+  city_group_match: "Group",
+};
+
+const TYPE_ICONS = {
+  large_airport: "✈",
+  medium_airport: "🛫",
+  small_airport: "🛩",
 };
 
 const TYPE_LABELS = {
   large_airport: "Large",
   medium_airport: "Medium",
   small_airport: "Small",
-  city_group: "Group",
 };
 
-function countryFlag(countryCode) {
+function flagEmoji(countryCode) {
   if (!countryCode || countryCode.length !== 2) {
     return "";
   }
@@ -25,98 +30,75 @@ function countryFlag(countryCode) {
     .replace(/./g, (letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)));
 }
 
-function airportTypeClass(type) {
-  if (type?.includes("large")) return "type-large";
-  if (type?.includes("medium")) return "type-medium";
-  if (type?.includes("small")) return "type-small";
-  return "type-neutral";
-}
-
-export default function ResultCard({ result, highlighted, onMouseEnter, onSelect }) {
+export default function ResultCard({ result, highlighted, onMouseEnter, onOpenDetail }) {
   const [expanded, setExpanded] = useState(false);
-  const isMultiAirportCity = Boolean(result.is_multi_airport_city);
-  const subAirports = result.sub_airports ?? [];
   const matchTypes = result.match_types ?? [];
-  const typeLabel = TYPE_LABELS[result.type] ?? result.type?.replaceAll("_", " ") ?? "Airport";
-  const flag = countryFlag(result.country_code);
+  const subAirports = result.sub_airports ?? [];
+  const isMultiAirportCity = Boolean(result.is_multi_airport_city);
+  const typeIcon = TYPE_ICONS[result.type] ?? "✈";
+  const typeLabel = TYPE_LABELS[result.type] ?? "Airport";
+  const flag = flagEmoji(result.country_code);
 
-  function handleCardClick() {
-    if (isMultiAirportCity) {
-      setExpanded((current) => !current);
-      return;
-    }
-
-    onSelect?.();
-  }
-
-  function handleExpandClick(event) {
+  function handleExpand(event) {
     event.stopPropagation();
     setExpanded((current) => !current);
   }
 
   return (
     <article
-      className={`result-card ${highlighted ? "result-card-highlighted" : ""}`}
+      className={`result-card ${highlighted ? "result-card-active" : ""}`}
       onMouseEnter={onMouseEnter}
-      onClick={handleCardClick}
+      onClick={onOpenDetail}
       role="option"
       aria-selected={highlighted}
       tabIndex={-1}
     >
-      <div className="result-main">
-        <span className="iata-badge">{result.iata}</span>
-
-        <div className="result-content">
-          <div className="result-title-row">
-            <h3>{result.name}</h3>
-          </div>
-
-          <p className="result-meta">
-            {result.city}
-            {result.country && <span>, {result.country}</span>}
-            {flag && <span className="flag" aria-hidden="true">{flag}</span>}
-          </p>
-
-          {matchTypes.length > 0 && (
-            <div className="match-pills" aria-label="Match types">
-              {matchTypes.map((matchType) => (
-                <span key={matchType} className={`match-pill match-${matchType}`}>
-                  {MATCH_LABELS[matchType] ?? matchType}
-                </span>
-              ))}
-            </div>
-          )}
+      <div className="result-card-main">
+        <div className="result-left">
+          <span className="iata-code">{result.iata}</span>
+          <span className="type-icon" aria-label={typeLabel}>{typeIcon}</span>
         </div>
 
-        <div className="result-side">
-          <span className={`type-badge ${airportTypeClass(result.type)}`}>{typeLabel}</span>
-          {isMultiAirportCity && (
-            <button
-              className={`expand-button ${expanded ? "expand-button-open" : ""}`}
-              type="button"
-              onClick={handleExpandClick}
-              aria-label={expanded ? "Collapse sub airports" : "Expand sub airports"}
-            >
-              <span aria-hidden="true" />
-            </button>
-          )}
+        <div className="result-center">
+          <div className="result-heading">
+            <h3>{result.name}</h3>
+            {isMultiAirportCity && (
+              <button className="airport-count" type="button" onClick={handleExpand}>
+                {subAirports.length} airports
+              </button>
+            )}
+          </div>
+
+          <p className="result-location">
+            <span>{result.city}</span>
+            {flag && <span>{flag}</span>}
+            {result.country && <span>{result.country}</span>}
+          </p>
+
+          <div className="result-tags">
+            {result.region && <span className="region-pill">{result.region}</span>}
+            {matchTypes.map((type) => (
+              <span key={type} className={`match-pill match-${type}`}>
+                {MATCH_LABELS[type] ?? type}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="result-right">
+          <span className="priority-ring" aria-label={`Priority ${result.priority}`}>
+            {result.priority ?? 0}
+          </span>
+          <span className="arrow" aria-hidden="true">→</span>
         </div>
       </div>
 
       {isMultiAirportCity && expanded && subAirports.length > 0 && (
-        <div className="sub-airports">
+        <div className="sub-airport-list" onClick={(event) => event.stopPropagation()}>
           {subAirports.map((airport) => (
-            <button
-              key={airport.iata}
-              className="sub-airport"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelect?.(airport);
-              }}
-            >
-              <span className="iata-badge iata-badge-small">{airport.iata}</span>
-              <span>{airport.display_name || airport.name}</span>
+            <button key={airport.iata} className="sub-airport-card" type="button">
+              <span className="sub-iata">{airport.iata}</span>
+              <span>{airport.name}</span>
             </button>
           ))}
         </div>
