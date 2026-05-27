@@ -65,15 +65,26 @@ Corrections after evaluating LLM output:
 
 ## Build, Buy, or Cut
 
-| Decision             | Choice              | Reason                                            |
-| -------------------- | ------------------- | ------------------------------------------------- |
-| Search engine        | Typesense (buy)     | Typo tolerance; self-hosted; fast setup           |
-| Data pipeline        | Built               | Airport-specific enrichment and ranking           |
-| Multilingual aliases | GeoNames (buy)      | Free global human-curated translations            |
-| City group codes     | Derived dynamically | Avoid a paid metro-code database                  |
-| Runtime LLM          | Cut entirely        | Autocomplete needs <50 ms; inference adds 500 ms+ |
-| Rate limiting        | `slowapi` (buy)     | Direct FastAPI integration                        |
-| UI component library | Cut                 | React + CSS variables sufficed                    |
+| Decision             | Choice                                 | Reason                                                                                                   |
+| -------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Search engine        | Typesense (buy)                        | Typo tolerance; self-hosted; fast setup                                                                  |
+| Data pipeline        | Built                                  | Airport-specific enrichment and ranking                                                                  |
+| Multilingual aliases | GeoNames (buy)                         | Free global human-curated translations                                                                   |
+| City group codes     | Derived dynamically                    | Avoid a paid metro-code database                                                                         |
+| Runtime LLM          | Cut entirely                           | Autocomplete needs <50 ms; inference adds 500 ms+                                                        |
+| Deployment           | AWS EC2 + Docker + GitHub/GitLab CI/CD | Image built on Github Actions. Manual pull and start on EC2. Treated as a real product not a local demo. |
+| Rate limiting        | `slowapi` (buy)                        | Direct FastAPI integration                                                                               |
+| UI component library | Cut                                    | React + CSS variables sufficed                                                                           |
+
+## Deployment
+
+Deployed on AWS EC2 with Docker at:
+https://fly-fairly-online-assessment.nakulgupta.in/
+
+CI/CD via GitHub Actions and GitLab CI:
+
+- Docker image pushed to registry on green build
+- EC2: manual pull, add `.env`, `docker-compose up -d`
 
 ## Production Evaluation
 

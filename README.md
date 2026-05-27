@@ -226,6 +226,24 @@ Expected covered cases:
 FINAL SCORE: 12/12
 ```
 
+## Deployment
+
+Live demo: https://fly-fairly-online-assessment.nakulgupta.in/
+
+Deployed on AWS EC2 using Docker.
+
+CI/CD pipeline (GitHub Actions + GitLab CI):
+
+- Push to main branch triggers pipeline
+- builds and pushes Docker image to registry
+
+EC2 deployment (manual):
+
+- SSH into EC2
+- `docker pull` latest image
+- Add `.env` file with environment variables
+- `docker-compose up -d`
+
 ## Data Pipeline Details
 
 ### Input Sources
