@@ -10,6 +10,8 @@ An end-to-end airport search system for an online travel agency, built to handle
 
 Fly Fairly combines a React interface, a FastAPI service, Typesense-backed retrieval, and an offline enrichment pipeline. It supports typo-tolerant and multilingual search, region discovery, tourism aliases, multi-airport cities, and ranking-based disambiguation.
 
+### Live demo: https://fly-fairly-online-assessment.nakulgupta.in/
+
 ## Architecture
 
 ```text
