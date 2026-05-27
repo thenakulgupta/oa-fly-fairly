@@ -18,6 +18,15 @@ TYPESENSE_PORT = 8108
 TYPESENSE_PROTOCOL = "http"
 TYPESENSE_API_KEY = "xyz123"
 COLLECTION_NAME = "airports"
+FUZZY_CANDIDATE_LIMIT = 20
+FINAL_RESULT_LIMIT = 10
+MATCH_TYPE_ORDER = [
+    "iata_exact",
+    "city_group_match",
+    "city_exact",
+    "region_match",
+    "fuzzy_match",
+]
 
 
 def normalize_query(query: str) -> str:
@@ -182,75 +191,160 @@ class AirportSearch:
         raw_query = query.strip()
         normalized_query = normalize_query(raw_query)
         uppercase_query = raw_query.upper()
-        limit = max(1, limit)
+        result_limit = min(max(1, limit), FINAL_RESULT_LIMIT)
 
         if not raw_query:
-            return self._response(query, [], None)
+            return self._response(query, [])
 
+        candidates_by_iata: dict[str, dict] = {}
+        seen_iata: set[str] = set()
+
+        # Step 1: exact IATA is an O(1) set lookup.
+        # Step 2: city group is an O(1) dict lookup against preloaded JSON.
+        # Step 3: city/region exact matches are O(1) dict lookups.
+        # Step 4: fuzzy search is always attempted and merged with all prior
+        # candidates instead of acting as a fallback.
         if uppercase_query in self.city_group_by_code:
-            return self._response(
-                query,
-                [self._format_city_group(uppercase_query)],
+            group = self.city_group_by_code[uppercase_query]
+            self._add_iata_candidates(
+                candidates_by_iata,
+                seen_iata,
+                group["airports"],
                 "city_group_match",
             )
 
         if uppercase_query in self.iata_codes:
-            return self._response(
-                query,
-                [self._format_airport(self.airport_by_iata[uppercase_query])],
+            self._add_iata_candidate(
+                candidates_by_iata,
+                seen_iata,
+                uppercase_query,
                 "iata_exact",
             )
 
         city_iata_codes = self.airports_by_city.get(normalized_query, [])
         if city_iata_codes:
-            return self._response(
-                query,
-                self._format_airports(city_iata_codes[:limit]),
+            self._add_iata_candidates(
+                candidates_by_iata,
+                seen_iata,
+                city_iata_codes,
                 "city_exact",
             )
 
         region_iata_codes = self.airports_by_region.get(normalized_query, [])
         if region_iata_codes:
-            return self._response(
-                query,
-                self._format_airports(region_iata_codes[:limit]),
+            self._add_iata_candidates(
+                candidates_by_iata,
+                seen_iata,
+                region_iata_codes,
                 "region_match",
             )
 
-        search_token_iata_codes = self.airports_by_search_token.get(normalized_query, [])
-        if search_token_iata_codes:
-            return self._response(
-                query,
-                self._format_airports(search_token_iata_codes[:limit]),
-                "fuzzy_match",
-            )
-
-        search_prefix_iata_codes = self._search_by_prefixes(normalized_query)
-        if search_prefix_iata_codes:
-            return self._response(
-                query,
-                self._format_airports(search_prefix_iata_codes[:limit]),
-                "fuzzy_match",
-            )
-
-        fuzzy_documents = self.typesense.fuzzy_search(normalized_query, limit)
-        fuzzy_documents = sorted(
+        fuzzy_documents = self._fuzzy_documents(normalized_query)
+        self._add_document_candidates(
+            candidates_by_iata,
+            seen_iata,
             fuzzy_documents,
-            key=lambda document: document.get("priority", 0),
-            reverse=True,
-        )
-        return self._response(
-            query,
-            [self._format_airport(document) for document in fuzzy_documents[:limit]],
             "fuzzy_match",
         )
 
-    def _format_airports(self, iata_codes: list[str]) -> list[dict]:
-        return [
-            self._format_airport(self.airport_by_iata[iata_code])
-            for iata_code in iata_codes
+        sorted_candidates = sorted(
+            candidates_by_iata.values(),
+            key=lambda candidate: candidate["document"].get("priority", 0),
+            reverse=True,
+        )
+        results = [
+            self._format_airport(candidate["document"], candidate["match_types"])
+            for candidate in sorted_candidates[:result_limit]
+        ]
+
+        return self._response(query, results)
+
+    def _add_iata_candidates(
+        self,
+        candidates_by_iata: dict[str, dict],
+        seen_iata: set[str],
+        iata_codes: list[str],
+        match_type: str,
+    ) -> None:
+        for iata_code in iata_codes:
+            self._add_iata_candidate(candidates_by_iata, seen_iata, iata_code, match_type)
+
+    def _add_iata_candidate(
+        self,
+        candidates_by_iata: dict[str, dict],
+        seen_iata: set[str],
+        iata_code: str,
+        match_type: str,
+    ) -> None:
+        document = self.airport_by_iata.get(iata_code)
+        if document is None:
+            return
+
+        self._add_document_candidate(candidates_by_iata, seen_iata, document, match_type)
+
+    def _add_document_candidates(
+        self,
+        candidates_by_iata: dict[str, dict],
+        seen_iata: set[str],
+        documents: list[dict],
+        match_type: str,
+    ) -> None:
+        for document in documents:
+            self._add_document_candidate(candidates_by_iata, seen_iata, document, match_type)
+
+    def _add_document_candidate(
+        self,
+        candidates_by_iata: dict[str, dict],
+        seen_iata: set[str],
+        document: dict,
+        match_type: str,
+    ) -> None:
+        iata = document.get("iata")
+        if not iata:
+            return
+
+        # DSA requirement: use a dict keyed by IATA plus a seen set for O(1)
+        # deduplication while merging candidates from every search strategy.
+        if iata not in seen_iata:
+            seen_iata.add(iata)
+            candidates_by_iata[iata] = {
+                "document": self.airport_by_iata.get(iata, document),
+                "match_types": set(),
+            }
+        else:
+            existing_document = candidates_by_iata[iata]["document"]
+            if document.get("priority", 0) > existing_document.get("priority", 0):
+                candidates_by_iata[iata]["document"] = document
+
+        candidates_by_iata[iata]["match_types"].add(match_type)
+
+    def _fuzzy_documents(self, normalized_query: str) -> list[dict]:
+        fuzzy_documents: list[dict] = []
+
+        try:
+            fuzzy_documents = self.typesense.fuzzy_search(
+                normalized_query,
+                FUZZY_CANDIDATE_LIMIT,
+            )
+        except (HTTPError, URLError, TimeoutError, OSError):
+            fuzzy_documents = []
+
+        fallback_iata_codes = self._local_fuzzy_iata_codes(normalized_query)
+        fallback_documents = [
+            self.airport_by_iata[iata_code]
+            for iata_code in fallback_iata_codes
             if iata_code in self.airport_by_iata
         ]
+
+        return fuzzy_documents + fallback_documents
+
+    def _local_fuzzy_iata_codes(self, normalized_query: str) -> list[str]:
+        search_token_iata_codes = self.airports_by_search_token.get(normalized_query, [])
+        if search_token_iata_codes:
+            return search_token_iata_codes
+
+        search_prefix_iata_codes = self._search_by_prefixes(normalized_query)
+        return self._sort_iata_codes_by_priority(list(dict.fromkeys(search_prefix_iata_codes)))
 
     def _search_by_prefixes(self, normalized_query: str) -> list[str]:
         query_tokens = [token for token in normalized_query.split() if len(token) >= 3]
@@ -267,10 +361,13 @@ class AirportSearch:
         matching_iata_codes = set.intersection(*matching_iata_sets)
         return self._sort_iata_codes_by_priority(list(matching_iata_codes))
 
-    def _format_airport(self, document: dict) -> dict:
+    def _format_airport(self, document: dict, match_types: set[str] | list[str]) -> dict:
         iata = document["iata"]
         city = document.get("city") or ""
         region = document.get("region")
+        ordered_match_types = [
+            match_type for match_type in MATCH_TYPE_ORDER if match_type in match_types
+        ]
 
         return {
             "iata": iata,
@@ -281,40 +378,10 @@ class AirportSearch:
             "country_code": document.get("country_code") or "",
             "region": region,
             "type": document.get("type") or "",
+            "priority": int(document.get("priority", 0)),
+            "match_types": ordered_match_types,
             "is_multi_airport_city": False,
             "sub_airports": [],
-        }
-
-    def _format_city_group(self, city_group_code: str) -> dict:
-        group = self.city_group_by_code[city_group_code]
-        sub_airports = []
-
-        for iata in group["airports"]:
-            document = self.airport_by_iata.get(iata)
-            if document is None:
-                continue
-
-            sub_airports.append(
-                {
-                    "iata": iata,
-                    "name": document.get("name") or "",
-                    "display_name": self._display_name(document),
-                }
-            )
-
-        primary_document = self.airport_by_iata.get(group["airports"][0], {})
-
-        return {
-            "iata": city_group_code,
-            "name": f"{group['city']} Area Airports",
-            "city": group["city"],
-            "display_name": group["label"],
-            "country": primary_document.get("country") or "",
-            "country_code": group["country_code"],
-            "region": primary_document.get("region"),
-            "type": "city_group",
-            "is_multi_airport_city": True,
-            "sub_airports": sub_airports,
         }
 
     def _display_name(self, document: dict) -> str:
@@ -327,12 +394,18 @@ class AirportSearch:
 
         return f"{city} ({iata})"
 
-    def _response(self, query: str, results: list[dict], search_type: str | None) -> dict:
+    def _response(self, query: str, results: list[dict]) -> dict:
+        search_types = [
+            match_type
+            for match_type in MATCH_TYPE_ORDER
+            if any(match_type in result["match_types"] for result in results)
+        ]
+
         return {
             "query": query,
             "results": results,
             "total": len(results),
-            "search_type": search_type,
+            "search_types": search_types,
         }
 
 

@@ -36,7 +36,7 @@ def search_airports(
             "query": q,
             "results": [],
             "total": 0,
-            "search_type": None,
+            "search_types": [],
         }
 
     try:
