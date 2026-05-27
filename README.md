@@ -58,13 +58,13 @@ airports.csv + countries.csv + regions.csv
 
 ## Tech Stack
 
-| Layer | Technology | Why |
-| --- | --- | --- |
-| Backend | Python + FastAPI | Async-ready, fast, and clean API development |
-| Search | Typesense | Fast self-hosted retrieval with typo tolerance |
-| Frontend | React + Vite | Component-based UI with a rapid development workflow |
-| Data | OurAirports + GeoNames | Open, reliable, global airport and place-name data |
-| Container | Docker Compose | Straightforward local Typesense setup |
+| Layer     | Technology             | Why                                                  |
+| --------- | ---------------------- | ---------------------------------------------------- |
+| Backend   | Python + FastAPI       | Async-ready, fast, and clean API development         |
+| Search    | Typesense              | Fast self-hosted retrieval with typo tolerance       |
+| Frontend  | React + Vite           | Component-based UI with a rapid development workflow |
+| Data      | OurAirports + GeoNames | Open, reliable, global airport and place-name data   |
+| Container | Docker Compose         | Straightforward local Typesense setup                |
 
 ## Project Structure
 
@@ -162,8 +162,6 @@ python build_region_mapping.py
 python build_city_groups.py
 ```
 
-> `enrich_aliases.py` processes approximately 18 million GeoNames alternate-name rows and typically takes 2 to 3 minutes to complete.
-
 ### 6. Start Typesense with Docker Compose
 
 The Compose definition is located in `backend/`, so run this while still in that directory.
@@ -202,11 +200,11 @@ Visit [http://localhost:5173](http://localhost:5173) in a browser.
 
 ## API Endpoints
 
-| Method | Endpoint | Description | Rate Limit |
-| --- | --- | --- | --- |
-| `GET` | `/search?q={query}&limit={limit}` | Search airports; `limit` is accepted from 1 to 100 and responses are capped at 10 results | 30/minute |
-| `GET` | `/stats` | Return live indexed-collection statistics | 20/minute |
-| `GET` | `/health` | Check API and Typesense status | 10/minute |
+| Method | Endpoint                          | Description                                                                               | Rate Limit |
+| ------ | --------------------------------- | ----------------------------------------------------------------------------------------- | ---------- |
+| `GET`  | `/search?q={query}&limit={limit}` | Search airports; `limit` is accepted from 1 to 100 and responses are capped at 10 results | 30/minute  |
+| `GET`  | `/stats`                          | Return live indexed-collection statistics                                                 | 20/minute  |
+| `GET`  | `/health`                         | Check API and Typesense status                                                            | 10/minute  |
 
 Every successful endpoint response includes a `rate_limit` block. Rate-limited responses return HTTP `429` with the same block and retry information.
 
@@ -253,24 +251,24 @@ FINAL SCORE: 12/12
 
 ### Input Sources
 
-| File | Rows | Purpose |
-| --- | ---: | --- |
-| `airports.csv` | 85,476 | Raw global airport data from OurAirports |
-| `countries.csv` | 249 | Country-name metadata |
-| `regions.csv` | 3,982 | Region and state metadata |
-| `cities15000.txt` | 33,742 | GeoNames city population data |
-| `alternateNames.txt` | 18,978,835 | Multilingual alternate place names |
-| `airports.dat` | 7,698 | Backup airport enrichment input |
+| File                 |       Rows | Purpose                                  |
+| -------------------- | ---------: | ---------------------------------------- |
+| `airports.csv`       |     85,476 | Raw global airport data from OurAirports |
+| `countries.csv`      |        249 | Country-name metadata                    |
+| `regions.csv`        |      3,982 | Region and state metadata                |
+| `cities15000.txt`    |     33,742 | GeoNames city population data            |
+| `alternateNames.txt` | 18,978,835 | Multilingual alternate place names       |
+| `airports.dat`       |      7,698 | Backup airport enrichment input          |
 
 ### Generated Index Metrics
 
-| Metric | Count |
-| --- | ---: |
+| Metric                      | Count |
+| --------------------------- | ----: |
 | Indexed IATA-coded airports | 8,805 |
-| Country metadata rows | 249 |
-| Region metadata rows | 3,982 |
-| Multi-airport city groups | 358 |
-| Regions mapped to airports | 2,097 |
+| Country metadata rows       |   249 |
+| Region metadata rows        | 3,982 |
+| Multi-airport city groups   |   358 |
+| Regions mapped to airports  | 2,097 |
 
 Live document, country, region, capital, and alias coverage statistics are also exposed through `GET /stats`.
 
@@ -288,32 +286,32 @@ Candidates from the strategies are merged and deduplicated by IATA code, then ra
 
 ### Priority Scoring
 
-| Signal | Score |
-| --- | ---: |
-| `large_airport` base score | 90 |
-| `medium_airport` base score | 70 |
-| `small_airport` base score | 50 |
-| City population greater than 1 million | +10 |
-| City population greater than 500,000 | +5 |
-| Capital city | +5 |
-| Maximum stored priority | 100 |
+| Signal                                 | Score |
+| -------------------------------------- | ----: |
+| `large_airport` base score             |    90 |
+| `medium_airport` base score            |    70 |
+| `small_airport` base score             |    50 |
+| City population greater than 1 million |   +10 |
+| City population greater than 500,000   |    +5 |
+| Capital city                           |    +5 |
+| Maximum stored priority                |   100 |
 
 ## Edge Cases Handled
 
-| Query | Expected Result | Problem Class |
-| --- | --- | --- |
-| `Hawaii` | `HNL`, `OGG`, `KOA`, `LIH` | State/region search |
-| `Bali` | `DPS` first | Tourism alias |
-| `LON` | Group containing `LHR`, `LGW`, `STN`, `LCY`, `LTN` | Multi-airport city |
-| `London` | London, UK airports rank first | Disambiguation |
-| `Londn` | London airports | Typo tolerance |
-| `東京` | `HND`, `NRT` | Japanese-script search |
-| `서울` | `ICN`, `GMP` | Korean-script search |
-| `Sao Paulo` | Same results as `São Paulo` | Accent insensitive |
-| `TUL` | Tulsa airport | IATA reverse lookup |
-| `Florida` | Florida airports without Chilean false matches at the top | Region disambiguation |
-| `Manama` | `BAH` | City-to-airport search |
-| `Brussels` | `BRU` | Alias versus municipality |
+| Query       | Expected Result                                           | Problem Class             |
+| ----------- | --------------------------------------------------------- | ------------------------- |
+| `Hawaii`    | `HNL`, `OGG`, `KOA`, `LIH`                                | State/region search       |
+| `Bali`      | `DPS` first                                               | Tourism alias             |
+| `LON`       | Group containing `LHR`, `LGW`, `STN`, `LCY`, `LTN`        | Multi-airport city        |
+| `London`    | London, UK airports rank first                            | Disambiguation            |
+| `Londn`     | London airports                                           | Typo tolerance            |
+| `東京`      | `HND`, `NRT`                                              | Japanese-script search    |
+| `서울`      | `ICN`, `GMP`                                              | Korean-script search      |
+| `Sao Paulo` | Same results as `São Paulo`                               | Accent insensitive        |
+| `TUL`       | Tulsa airport                                             | IATA reverse lookup       |
+| `Florida`   | Florida airports without Chilean false matches at the top | Region disambiguation     |
+| `Manama`    | `BAH`                                                     | City-to-airport search    |
+| `Brussels`  | `BRU`                                                     | Alias versus municipality |
 
 ## LLM Usage
 
