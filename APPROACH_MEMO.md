@@ -1,9 +1,10 @@
 # Fly Fairly Airport Search Engine: Approach Memo
 
-**Technical assessment submission | Python + FastAPI + Typesense + React**  
-**Live demo:** [https://fly-fairly-online-assessment.nakulgupta.in/](https://fly-fairly-online-assessment.nakulgupta.in/)
-**Walkthrough:** [https://loom.in](https://loom.in)
-**LLM Prompt Logs:** [Cursor](https://www.notion.so/Cursor-LLM-Prompts-36c6f02c9bd08016b562f43cd384bc32) | [Research](https://www.notion.so/Research-LLM-Prompts-36c6f02c9bd080f380badbf5acbb382e)
+**Technical assessment submission | Python + FastAPI + Typesense + React**
+
+- **Live demo:** [https://fly-fairly-online-assessment.nakulgupta.in/](https://fly-fairly-online-assessment.nakulgupta.in/)
+- **Walkthrough:** [https://loom.in](https://loom.in)
+- **LLM Prompt Logs:** [Cursor](https://www.notion.so/Cursor-LLM-Prompts-36c6f02c9bd08016b562f43cd384bc32) | [Research](https://www.notion.so/Research-LLM-Prompts-36c6f02c9bd080f380badbf5acbb382e)
 
 ## Problem Framing
 
