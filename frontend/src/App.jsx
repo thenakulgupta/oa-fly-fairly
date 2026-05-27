@@ -81,7 +81,9 @@ export default function App() {
     <main className="app-shell">
       <header className="site-header">
         <a className="brand-lockup" href="/" aria-label="Fly Fairly home">
-          <span className="brand-icon" aria-hidden="true">✈</span>
+          <span className="brand-icon" aria-hidden="true">
+            ✈
+          </span>
           <span className="brand-text">
             <strong>FLY FAIRLY</strong>
             <span>Airport Intelligence Engine</span>
@@ -156,7 +158,13 @@ export default function App() {
       <TestPanel activeSearch={activeSearch} onSelect={handleTestSelect} />
 
       <footer className="footer">
-        <span>© 2026 Fly Fairly. Built for the future of travel.</span>
+        <span>
+          Made by{" "}
+          <a href="https://nakulgupta.in/resume" target="_blank">
+            Nakul Gupta
+          </a>{" "}
+          for online assessment of Fly Fairly.
+        </span>
         <span>FastAPI + Typesense + React</span>
       </footer>
 
