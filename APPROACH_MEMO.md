@@ -48,6 +48,19 @@ I run all tiers, deduplicate by IATA, then rank; first-match stopping caused Bal
 
 **Priority:** `large=90`, `medium=70`, `small=50`; `+10` if population >1M, `+5` if >500K, `+5` if capital, cap `100`, plus query-match boosts. This additive approach ranks London UK hubs above lower-signal alternatives without hardcoding a winner.
 
+## Tradeoffs
+
+| Decision                                | Chose                  | Over                          | Why                                                                                                                                          |
+| --------------------------------------- | ---------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| cities15000 vs allCountries             | cities15000 (25K rows) | allCountries (12M rows)       | allCountries includes mountains, rivers, villages — adds ranking noise. Smaller dataset is cleaner and faster to process                     |
+| Offline enrichment vs runtime LLM       | Offline pipeline       | Runtime LLM at query time     | Autocomplete needs <50ms. Runtime LLM adds 500ms+ latency, network risk, API cost. Aliases baked in at index time                            |
+| All tiers run vs first match stops      | All tiers run          | Stop at first match           | First match caused Bali to return Cameroon airport instead of DPS. Collecting all candidates then ranking by priority gives better relevance |
+| Dynamic city groups vs IATA metro codes | Derived from data      | Paid IATA metro database      | IATA metro codes (NYC, LON) are behind a paid database. Used highest priority airport iata as group key — free and deterministic             |
+| IATA only filter vs ICAO                | IATA only              | IATA + ICAO                   | Simpler, traveler facing identifier. Tradeoff: excludes some valid airports with ICAO but no IATA — worth a product conversation             |
+| Typesense self hosted vs cloud search   | Self hosted Typesense  | Elasticsearch, Algolia        | Lighter to operate than Elasticsearch, cheaper than Algolia, purpose built for typo tolerance. Tradeoff: need to manage infra                |
+| Prefix binary search vs Levenshtein     | Binary search prefix   | Full Levenshtein distance     | Levenshtein on 8805 airports per query is O(n) with string comparison overhead. Binary search on sorted city names is O(log n)               |
+| Single search_text field vs multi field | Single combined field  | Search across multiple fields | Simpler Typesense query, one field to tune. Tradeoff: loses field level boosting granularity                                                 |
+
 ## LLM Tools and Prompting
 
 I used **Claude (claude.ai)** for research/reasoning and **Cursor** for implementation, with small iterative prompts followed by testing and manual review.
