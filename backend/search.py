@@ -172,7 +172,7 @@ class AirportSearch:
             }
 
             for token in tokens:
-                for prefix_length in range(3, len(token) + 1):
+                for prefix_length in range(2, len(token) + 1):
                     airports_by_prefix[token[:prefix_length]].append(document["iata"])
 
         return {
@@ -249,7 +249,7 @@ class AirportSearch:
 
         sorted_candidates = sorted(
             candidates_by_iata.values(),
-            key=lambda candidate: candidate["document"].get("priority", 0),
+            key=lambda candidate: self._candidate_sort_key(candidate, normalized_query),
             reverse=True,
         )
         results = [
@@ -340,14 +340,41 @@ class AirportSearch:
 
     def _local_fuzzy_iata_codes(self, normalized_query: str) -> list[str]:
         search_token_iata_codes = self.airports_by_search_token.get(normalized_query, [])
-        if search_token_iata_codes:
+        if search_token_iata_codes and len(normalized_query) >= 4:
             return search_token_iata_codes
 
         search_prefix_iata_codes = self._search_by_prefixes(normalized_query)
-        return self._sort_iata_codes_by_priority(list(dict.fromkeys(search_prefix_iata_codes)))
+        iata_codes = search_token_iata_codes + search_prefix_iata_codes
+        return self._sort_iata_codes_by_priority(list(dict.fromkeys(iata_codes)))
+
+    def _candidate_sort_key(self, candidate: dict, normalized_query: str) -> tuple[int, int]:
+        priority = int(candidate["document"].get("priority", 0))
+
+        if len(normalized_query) > 2:
+            return (priority, 0)
+
+        best_prefix_length = self._best_prefix_field_length(
+            candidate["document"],
+            normalized_query,
+        )
+        prefix_score = 0 if best_prefix_length is None else 10_000 - best_prefix_length
+        return (prefix_score, priority)
+
+    def _best_prefix_field_length(self, document: dict, normalized_query: str) -> int | None:
+        values = [
+            document.get("city") or "",
+            document.get("region") or "",
+            *(document.get("city_aliases") or []),
+        ]
+        prefix_lengths = [
+            len(normalized_value)
+            for value in values
+            if (normalized_value := normalize_query(value)).startswith(normalized_query)
+        ]
+        return min(prefix_lengths) if prefix_lengths else None
 
     def _search_by_prefixes(self, normalized_query: str) -> list[str]:
-        query_tokens = [token for token in normalized_query.split() if len(token) >= 3]
+        query_tokens = [token for token in normalized_query.split() if len(token) >= 2]
         if not query_tokens:
             return []
 
