@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+import csv
 import json
 import unicodedata
 
@@ -12,14 +13,17 @@ AIRPORT_INDEX_PATH = ROOT_DIR / "data" / "airports_index.json"
 CITY_GROUPS_PATH = ROOT_DIR / "data" / "city_groups.json"
 AIRPORT_TO_CITY_GROUP_PATH = ROOT_DIR / "data" / "airport_to_city_group.json"
 REGION_MAPPING_PATH = ROOT_DIR / "data" / "region_mapping.json"
+COUNTRIES_PATH = ROOT_DIR / "data" / "countries.csv"
+REGIONS_PATH = ROOT_DIR / "data" / "regions.csv"
 
 TYPESENSE_HOST = "localhost"
 TYPESENSE_PORT = 8108
 TYPESENSE_PROTOCOL = "http"
-TYPESENSE_API_KEY = "xyz123"
+TYPESENSE_API_KEY = "nakulgupta-1076787674878372323dsff"
 COLLECTION_NAME = "airports"
 FUZZY_CANDIDATE_LIMIT = 20
 FINAL_RESULT_LIMIT = 10
+STATS_PAGE_SIZE = 250
 MATCH_TYPE_ORDER = [
     "iata_exact",
     "city_group_match",
@@ -40,6 +44,13 @@ def normalize_query(query: str) -> str:
 def load_json(path: Path):
     with path.open(encoding="utf-8") as input_file:
         return json.load(input_file)
+
+
+def count_csv_data_rows(path: Path) -> int:
+    with path.open(newline="", encoding="utf-8") as input_file:
+        reader = csv.reader(input_file)
+        next(reader, None)
+        return sum(1 for _ in reader)
 
 
 class TypesenseHttpClient:
@@ -91,6 +102,36 @@ class TypesenseHttpClient:
         )
         return [hit["document"] for hit in response.get("hits", [])]
 
+    def collection_facets(self) -> dict:
+        params = urlencode(
+            {
+                "q": "*",
+                "query_by": "search_text",
+                "per_page": 1,
+                "facet_by": "type,country_code,region",
+                "max_facet_values": 10000,
+            }
+        )
+        return self.request(
+            "GET",
+            f"/collections/{COLLECTION_NAME}/documents/search?{params}",
+        )
+
+    def search_documents_page(self, page: int, per_page: int, include_fields: str) -> dict:
+        params = urlencode(
+            {
+                "q": "*",
+                "query_by": "search_text",
+                "page": page,
+                "per_page": per_page,
+                "include_fields": include_fields,
+            }
+        )
+        return self.request(
+            "GET",
+            f"/collections/{COLLECTION_NAME}/documents/search?{params}",
+        )
+
 
 class AirportSearch:
     def __init__(self) -> None:
@@ -105,6 +146,8 @@ class AirportSearch:
         self.airports_by_region: dict[str, list[str]] = {}
         self.airports_by_search_token: dict[str, list[str]] = {}
         self.airports_by_search_prefix: dict[str, list[str]] = {}
+        self.total_countries = 0
+        self.total_regions = 0
 
     def startup(self) -> None:
         documents = load_json(AIRPORT_INDEX_PATH)
@@ -125,6 +168,8 @@ class AirportSearch:
         self.airports_by_region = self._build_region_index(region_mapping)
         self.airports_by_search_token = self._build_search_token_index(documents)
         self.airports_by_search_prefix = self._build_search_prefix_index(documents)
+        self.total_countries = count_csv_data_rows(COUNTRIES_PATH)
+        self.total_regions = count_csv_data_rows(REGIONS_PATH)
         self.connected = self.typesense.health()
 
     def _build_city_index(self, documents: list[dict]) -> dict[str, list[str]]:
@@ -258,6 +303,46 @@ class AirportSearch:
         ]
 
         return self._response(query, results)
+
+    def stats(self) -> dict:
+        facet_response = self.typesense.collection_facets()
+        facet_counts = {
+            facet["field_name"]: {
+                value["value"]: value["count"]
+                for value in facet.get("counts", [])
+                if value.get("value")
+            }
+            for facet in facet_response.get("facet_counts", [])
+        }
+
+        return {
+            "total_airports": int(facet_response.get("found", 0)),
+            "total_countries": len(facet_counts.get("country_code", {})),
+            "total_regions": len(facet_counts.get("region", {})),
+            "by_type": facet_counts.get("type", {}),
+            "multi_airport_cities": len(self.city_group_by_code),
+            "airports_with_aliases": self._count_airports_with_aliases(
+                int(facet_response.get("found", 0))
+            ),
+        }
+
+    def _count_airports_with_aliases(self, total_airports: int) -> int:
+        airports_with_aliases = 0
+
+        for offset in range(0, total_airports, STATS_PAGE_SIZE):
+            page = (offset // STATS_PAGE_SIZE) + 1
+            response = self.typesense.search_documents_page(
+                page=page,
+                per_page=STATS_PAGE_SIZE,
+                include_fields="city_aliases",
+            )
+
+            for hit in response.get("hits", []):
+                city_aliases = hit.get("document", {}).get("city_aliases", [])
+                if city_aliases:
+                    airports_with_aliases += 1
+
+        return airports_with_aliases
 
     def _add_iata_candidates(
         self,
@@ -450,3 +535,7 @@ def health_status() -> str:
 
 def search_airports(query: str, limit: int = 10) -> dict:
     return search_service.search(query, limit)
+
+
+def airport_stats() -> dict:
+    return search_service.stats()

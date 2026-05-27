@@ -145,3 +145,19 @@ def health(request: Request, response: Response):
         "typesense": search.health_status(),
         "rate_limit": success_rate_limit_block(request, response),
     }
+
+
+@app.get("/stats")
+@limiter.limit("20/minute")
+def stats(request: Request, response: Response):
+    rate_limit = success_rate_limit_block(request, response)
+
+    try:
+        result = search.airport_stats()
+        result["rate_limit"] = rate_limit
+        return result
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Airport stats unavailable: {error}",
+        ) from error
