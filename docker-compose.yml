@@ -6,8 +6,6 @@ services:
       - ./typesense-data:/data
     env_file:
       - .env
-    expose:
-      - "${TYPESENSE_PORT}"
     command: >
       --data-dir /data
       --api-key=${TYPESENSE_API_KEY}
@@ -17,9 +15,6 @@ services:
   airport-search:
     container_name: airport-search
     image: registry.gitlab.com/nakul-gupta/airport-search:latest
-    build:
-      context: ..
-      dockerfile: backend/Dockerfile
     depends_on:
       - typesense
     env_file:
@@ -27,3 +22,13 @@ services:
     ports:
       - "3004:3004"
     restart: unless-stopped
+    volumes:
+      - airport_search_frontend:/app/frontend # This handles the auto-copy
+
+volumes:
+  airport_search_frontend:
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/www/airport-search/frontend
+      o: bind
