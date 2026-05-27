@@ -3,7 +3,7 @@
 **Technical assessment submission | Python + FastAPI + Typesense + React**
 
 - **Live demo:** [https://fly-fairly-online-assessment.nakulgupta.in/](https://fly-fairly-online-assessment.nakulgupta.in/)
-- **Walkthrough:** [https://loom.in](https://loom.in)
+- **Walkthrough:** [https://drive.google.com/file/d/1kn9Ubj0WqMtCGtDSLVZszZX6hQGda9E9/view?usp=sharing](https://drive.google.com/file/d/1kn9Ubj0WqMtCGtDSLVZszZX6hQGda9E9/view?usp=sharing)
 - **LLM Prompt Logs:** [Cursor](https://www.notion.so/Cursor-LLM-Prompts-36c6f02c9bd08016b562f43cd384bc32) | [Research](https://www.notion.so/Research-LLM-Prompts-36c6f02c9bd080f380badbf5acbb382e)
 
 ## Problem Framing
