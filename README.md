@@ -15,3 +15,5 @@ docker-compose up -d
 python index_airports.py
 
 ./venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+backend/venv/bin/python -m pytest -s test_search.py -q

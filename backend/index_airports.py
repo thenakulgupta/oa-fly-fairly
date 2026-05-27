@@ -29,6 +29,7 @@ AIRPORT_SCHEMA = {
         {"name": "name", "type": "string"},
         {"name": "city", "type": "string"},
         {"name": "city_aliases", "type": "string[]"},
+        {"name": "keywords", "type": "string[]"},
         {"name": "country", "type": "string"},
         {"name": "country_code", "type": "string", "facet": True},
         {"name": "region", "type": "string", "facet": True, "optional": True},
@@ -103,6 +104,25 @@ def parse_aliases(raw_aliases: object) -> list[str]:
     return deduped_aliases
 
 
+def parse_keywords(raw_keywords: object) -> list[str]:
+    keywords: list[str] = []
+    seen_keywords: set[str] = set()
+
+    for keyword in clean_text(raw_keywords).split(","):
+        keyword_text = keyword.strip()
+        keyword_key = keyword_text.casefold()
+
+        # DSA optimization: airport-supplied keyword deduplication is O(1)
+        # per entry while retaining source order for deterministic documents.
+        if not keyword_text or keyword_key in seen_keywords:
+            continue
+
+        seen_keywords.add(keyword_key)
+        keywords.append(keyword_text)
+
+    return keywords
+
+
 def build_search_text(parts: list[object]) -> str:
     tokens: list[str] = []
     seen_tokens: set[str] = set()
@@ -155,6 +175,7 @@ def build_airport_documents(
         iata = clean_text(airport.iata_code)
         city = clean_text(airport.municipality)
         city_aliases = parse_aliases(airport.city_aliases)
+        keywords = parse_keywords(airport.keywords)
         country = clean_text(airport.country_name)
         region = optional_text(airport.region_name)
         name = clean_text(airport.name)
@@ -165,6 +186,7 @@ def build_airport_documents(
             "name": name,
             "city": city,
             "city_aliases": city_aliases,
+            "keywords": keywords,
             "country": country,
             "country_code": clean_text(airport.iso_country),
             "region": region,
@@ -176,7 +198,9 @@ def build_airport_documents(
             "longitude": optional_float(airport.longitude_deg),
             "is_capital": parse_bool(airport.is_capital),
             "city_population": optional_int(airport.city_population),
-            "search_text": build_search_text([iata, city, city_aliases, name, country, region]),
+            "search_text": build_search_text(
+                [iata, city, city_aliases, keywords, name, country, region]
+            ),
         }
         documents.append(document)
 

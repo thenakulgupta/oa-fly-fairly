@@ -192,6 +192,7 @@ class AirportSearch:
         self.iata_codes: set[str] = set()
         self.city_group_by_code: dict[str, dict] = {}
         self.city_group_by_iata: dict[str, str] = {}
+        self.city_group_by_keyword: dict[str, str] = {}
         self.region_mapping: dict[str, list[str]] = {}
         self.airports_by_city: dict[str, list[str]] = {}
         self.airports_by_region: dict[str, list[str]] = {}
@@ -214,6 +215,7 @@ class AirportSearch:
         # DSA requirement: airport_to_city_group is the inverted index that gives
         # O(1) multi-airport city lookup by airport IATA.
         self.city_group_by_iata = dict(airport_to_city_group)
+        self.city_group_by_keyword = self._build_city_group_keyword_index(city_groups)
         # DSA requirement: keep region mapping in memory for O(1) exact region lookup.
         self.region_mapping = region_mapping
         self.airports_by_city = self._build_city_index(documents)
@@ -290,6 +292,30 @@ class AirportSearch:
         # matching city-prefix rows instead of all airports.
         return sorted(city_entries)
 
+    def _build_city_group_keyword_index(self, city_groups: dict[str, dict]) -> dict[str, str]:
+        groups_by_keyword: dict[str, set[str]] = defaultdict(set)
+
+        for group_code, group in city_groups.items():
+            keyword_counts: dict[str, int] = defaultdict(int)
+            for iata_code in group["airports"]:
+                document = self.airport_by_iata.get(iata_code, {})
+                for keyword in set(document.get("keywords") or []):
+                    keyword_code = keyword.strip().upper()
+                    if len(keyword_code) == 3 and keyword_code.isalpha():
+                        keyword_counts[keyword_code] += 1
+
+            for keyword_code, count in keyword_counts.items():
+                if count > 1:
+                    groups_by_keyword[keyword_code].add(group_code)
+
+        # DSA optimization: map a shared, unambiguous source keyword (such as
+        # a metro code) to its city group once for O(1) query-time lookup.
+        return {
+            keyword: next(iter(group_codes))
+            for keyword, group_codes in groups_by_keyword.items()
+            if len(group_codes) == 1
+        }
+
     def _sort_iata_codes_by_priority(self, iata_codes: list[str]) -> list[str]:
         return sorted(
             iata_codes,
@@ -309,6 +335,7 @@ class AirportSearch:
 
         candidates_by_iata: dict[str, dict] = {}
         seen_iata: set[str] = set()
+        matched_city_group_code = None
 
         # Step 1: exact IATA is an O(1) set lookup.
         # Step 2: city group is an O(1) dict lookup against preloaded JSON.
@@ -317,12 +344,22 @@ class AirportSearch:
         # candidates instead of acting as a fallback.
         if uppercase_query in self.city_group_by_code:
             group = self.city_group_by_code[uppercase_query]
+            matched_city_group_code = uppercase_query
             self._add_iata_candidates(
                 candidates_by_iata,
                 seen_iata,
                 group["airports"],
                 "city_group_match",
             )
+        elif uppercase_query not in self.iata_codes:
+            matched_city_group_code = self.city_group_by_keyword.get(uppercase_query)
+            if matched_city_group_code:
+                self._add_iata_candidates(
+                    candidates_by_iata,
+                    seen_iata,
+                    self.city_group_by_code[matched_city_group_code]["airports"],
+                    "city_group_match",
+                )
 
         if uppercase_query in self.iata_codes:
             self._add_iata_candidate(
@@ -367,15 +404,36 @@ class AirportSearch:
             "fuzzy_match",
         )
 
+        if any(
+            self._direct_match_boost(candidate["document"], normalized_query)
+            for candidate in candidates_by_iata.values()
+        ):
+            candidates_by_iata = {
+                iata: candidate
+                for iata, candidate in candidates_by_iata.items()
+                if self._direct_match_boost(candidate["document"], normalized_query)
+                or "iata_exact" in candidate["match_types"]
+                or "city_group_match" in candidate["match_types"]
+            }
+
         sorted_candidates = sorted(
             candidates_by_iata.values(),
-            key=lambda candidate: self._candidate_sort_key(candidate, query_variants),
+            key=lambda candidate: self._candidate_sort_key(
+                candidate, normalized_query, query_variants
+            ),
             reverse=True,
         )
         results = [
             self._format_airport(candidate["document"], candidate["match_types"])
             for candidate in sorted_candidates[:result_limit]
         ]
+
+        if matched_city_group_code and uppercase_query not in self.iata_codes:
+            group_iata_codes = set(self.city_group_by_code[matched_city_group_code]["airports"])
+            results = [
+                self._format_city_group(matched_city_group_code),
+                *[result for result in results if result["iata"] not in group_iata_codes],
+            ][:result_limit]
 
         return self._response(query, results)
 
@@ -522,7 +580,12 @@ class AirportSearch:
         iata_codes = search_token_iata_codes + search_prefix_iata_codes
         return self._sort_iata_codes_by_priority(list(dict.fromkeys(iata_codes)))
 
-    def _candidate_sort_key(self, candidate: dict, query_variants: list[str]) -> tuple[int, int, int]:
+    def _candidate_sort_key(
+        self,
+        candidate: dict,
+        normalized_query: str,
+        query_variants: list[str],
+    ) -> tuple[int, int, int]:
         document = candidate["document"]
         priority = int(document.get("priority", 0))
         match_types = candidate["match_types"]
@@ -532,7 +595,10 @@ class AirportSearch:
             search_step_boost += 500
 
         return (
-            priority + self._city_match_boost(document, query_variants) + search_step_boost,
+            priority
+            + self._direct_match_boost(document, normalized_query)
+            + self._city_match_boost(document, query_variants)
+            + search_step_boost,
             priority,
             -len(document.get("name") or ""),
         )
@@ -557,6 +623,29 @@ class AirportSearch:
             if query_variant
         )
         return 10 if partial_city_match else 0
+
+    def _direct_match_boost(self, document: dict, normalized_query: str) -> int:
+        if not normalized_query:
+            return 0
+
+        if normalize_query(document.get("region") or "") == normalized_query:
+            return 300
+
+        if normalized_query in self._city_terms(document):
+            return 200
+
+        keywords = {
+            normalize_query(keyword) for keyword in document.get("keywords") or []
+        }
+        if normalized_query in keywords:
+            return 250
+
+        if not normalized_query.isascii() and any(
+            keyword.startswith(normalized_query) for keyword in keywords
+        ):
+            return 150
+
+        return 0
 
     def _query_variants(self, normalized_query: str) -> list[str]:
         variants = [normalized_query]
@@ -619,6 +708,38 @@ class AirportSearch:
 
         matching_iata_codes = set.intersection(*matching_iata_sets)
         return self._sort_iata_codes_by_priority(list(matching_iata_codes))
+
+    def _format_city_group(self, group_code: str) -> dict:
+        group = self.city_group_by_code[group_code]
+        sub_documents = [
+            self.airport_by_iata[iata]
+            for iata in group["airports"]
+            if iata in self.airport_by_iata
+        ]
+        representative = sub_documents[0]
+        result = self._format_airport(representative, {"city_group_match"})
+        result.update(
+            {
+                "iata": group_code,
+                "name": f"{group['city']} Area Airports",
+                "city": group["city"],
+                "display_name": group["label"],
+                "country_code": group["country_code"],
+                "is_multi_airport_city": True,
+                "sub_airports": [
+                    {
+                        "iata": document["iata"],
+                        "name": document.get("name") or "",
+                        "display_name": (
+                            f"{document.get('city') or group['city']} "
+                            f"({document['iata']})"
+                        ),
+                    }
+                    for document in sub_documents
+                ],
+            }
+        )
+        return result
 
     def _format_airport(self, document: dict, match_types: set[str] | list[str]) -> dict:
         iata = document["iata"]
