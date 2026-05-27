@@ -160,6 +160,7 @@ python enrich_regions.py
 python enrich_aliases.py
 python build_region_mapping.py
 python build_city_groups.py
+python index_airports.py
 ```
 
 ### 6. Build and start the application with Docker Compose

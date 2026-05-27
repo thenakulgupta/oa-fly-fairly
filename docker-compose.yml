@@ -2,13 +2,15 @@ services:
   typesense:
     image: typesense/typesense:30.2
     container_name: typesense
-    expose:
-      - "8108"
     volumes:
       - ./typesense-data:/data
+    env_file:
+      - .env
+    expose:
+      - "${TYPESENSE_PORT}"
     command: >
       --data-dir /data
-      --api-key=nakulgupta-1076787674878372323dsff
+      --api-key=${TYPESENSE_API_KEY}
       --enable-cors
     restart: unless-stopped
 
@@ -20,11 +22,8 @@ services:
       dockerfile: backend/Dockerfile
     depends_on:
       - typesense
-    environment:
-      TYPESENSE_HOST: typesense
-      TYPESENSE_PORT: "8108"
-      TYPESENSE_API_KEY: nakulgupta-1076787674878372323dsff
-      PORT: "3004"
+    env_file:
+      - .env
     ports:
       - "3004:3004"
     restart: unless-stopped

@@ -23,7 +23,7 @@ TYPESENSE_PORT = int(os.environ.get("TYPESENSE_PORT", "8108"))
 TYPESENSE_PROTOCOL = os.environ.get("TYPESENSE_PROTOCOL", "http")
 TYPESENSE_API_KEY = os.environ.get(
     "TYPESENSE_API_KEY",
-    "nakulgupta-1076787674878372323dsff",
+    "nakulgupta",
 )
 COLLECTION_NAME = "airports"
 FUZZY_CANDIDATE_LIMIT = 20
